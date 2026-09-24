@@ -17,8 +17,12 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await handleLogin({ email: form.email, password: form.password });
-    navigate("/");
+    const user = await handleLogin({ email: form.email, password: form.password });
+    if(user.role == "buyer"){
+      navigate("/");
+    } else if (user.role == "seller"){
+      navigate("/seller/dashboard")
+    }
   };
 
   return (
