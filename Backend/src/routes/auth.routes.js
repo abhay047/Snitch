@@ -8,6 +8,7 @@ import {
     login,
     googleCallback,
     getMe,
+    becomeSeller,
 } from "../controllers/auth.controller.js";
 import passport from "passport";
 import { config } from "../config/config.js";
@@ -30,6 +31,8 @@ router.get(
     googleCallback,
 );
 
-router.get("/me", authenticateUser,getMe)
+router.get("/me", authenticateUser, getMe);
+
+router.patch("/become-seller", authenticateUser, becomeSeller);
 
 export default router;

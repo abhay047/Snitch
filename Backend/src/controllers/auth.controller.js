@@ -108,3 +108,28 @@ export const getMe = async (req,res)=>{
         }
     })
 }
+
+export const becomeSeller = async (req, res) => {
+    try {
+        const user = await userModel.findByIdAndUpdate(
+            req.user._id,
+            { role: "seller" },
+            { new: true }
+        );
+
+        res.status(200).json({
+            message: "Upgraded to seller successfully",
+            success: true,
+            user: {
+                id: user._id,
+                email: user.email,
+                contact: user.contact,
+                fullname: user.fullname,
+                role: user.role
+            }
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};

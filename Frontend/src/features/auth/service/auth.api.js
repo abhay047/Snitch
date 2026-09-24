@@ -29,3 +29,9 @@ export async function getMe() {
 
     return response.data
 }
+
+export async function becomeSeller() {
+    const response = await authApiInstance.patch("/become-seller")
+
+    return response.data
+}
