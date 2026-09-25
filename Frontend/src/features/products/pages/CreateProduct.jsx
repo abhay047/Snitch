@@ -1,10 +1,22 @@
 import { useState, useRef } from 'react'
 import { useProduct } from '../hook/useProduct.js'
-import { useNavigate } from 'react-router'
+import { useNavigate, Link } from 'react-router'
 
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP']
 const CURRENCY_SYMBOLS = { INR: '₹', USD: '$', EUR: '€', GBP: '£' }
 const MAX_IMAGES = 7
+
+const PRODUCT_CATEGORIES = ['TSHIRTS', 'SHIRTS', 'JEANS', 'HOODIES', 'OVERSIZED', 'OTHER']
+
+const COLOR_SUGGESTIONS = [
+  { name: 'Onyx Black', hex: '#111111' },
+  { name: 'Off-White', hex: '#f4f4f4' },
+  { name: 'Slate Grey', hex: '#64748b' },
+  { name: 'Beige', hex: '#d4b996' },
+  { name: 'Vintage Navy', hex: '#1e293b' },
+  { name: 'Olive Green', hex: '#556b2f' },
+  { name: 'Crimson', hex: '#991b1b' },
+]
 
 const CreateProduct = () => {
   const { handleCreateProduct } = useProduct()
@@ -13,6 +25,9 @@ const CreateProduct = () => {
   const [form, setForm] = useState({
     title: '',
     description: '',
+    category: 'TSHIRTS',
+    color: '',
+    stock: '25',
     priceAmount: '',
     priceCurrency: 'INR',
   })
@@ -66,11 +81,14 @@ const CreateProduct = () => {
       const formData = new FormData()
       formData.append('title', form.title)
       formData.append('description', form.description)
+      formData.append('category', form.category || 'TSHIRTS')
+      formData.append('color', form.color ? form.color.trim() : '')
+      formData.append('stock', form.stock || '25')
       formData.append('priceAmount', form.priceAmount)
       formData.append('priceCurrency', form.priceCurrency)
       images.forEach((img) => formData.append('images', img))
       await handleCreateProduct(formData)
-      navigate('/')
+      navigate('/seller/dashboard')
     } catch (err) {
       console.error('Failed to create product:', err)
     } finally {
@@ -85,13 +103,30 @@ const CreateProduct = () => {
     'block text-zinc-500 text-[10px] font-medium tracking-[0.25em] uppercase mb-3'
 
   return (
-    <div className={`bg-[#0a0a0a] px-6 py-14 sm:px-12 lg:px-24 ${images.length === 0 ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+    <div className="min-h-screen bg-[#0a0a0a] px-6 py-10 sm:px-12 lg:px-24 pb-28 text-white">
+
+      {/* Top Navigation */}
+      <div className="max-w-2xl mx-auto mb-8 flex items-center justify-between border-b border-zinc-900 pb-4">
+        <Link
+          to="/seller/dashboard"
+          className="inline-flex items-center gap-2 text-zinc-400 hover:text-white text-xs uppercase tracking-wider transition-colors cursor-pointer"
+        >
+          <span>←</span>
+          <span>Back to Dashboard</span>
+        </Link>
+        <Link
+          to="/"
+          className="text-zinc-500 hover:text-yellow-400 text-xs uppercase tracking-wider transition-colors cursor-pointer"
+        >
+          Snitch Store ↗
+        </Link>
+      </div>
 
       {/* Header */}
-      <div className="max-w-2xl mx-auto mb-12">
-        <p className="text-yellow-400 text-[10px] tracking-[0.35em] uppercase mb-3">Seller Studio</p>
+      <div className="max-w-2xl mx-auto mb-10">
+        <p className="text-yellow-400 text-[10px] tracking-[0.35em] uppercase mb-2">Seller Studio</p>
         <h1 className="text-white text-3xl sm:text-4xl font-black tracking-tight">Create Product</h1>
-        <p className="text-zinc-600 text-sm mt-2">Fill in the details below to list your product on Snitch.</p>
+        <p className="text-zinc-600 text-sm mt-1.5">Fill in the details below to list your product on Snitch.</p>
       </div>
 
       {/* Form */}
@@ -111,6 +146,90 @@ const CreateProduct = () => {
           />
         </div>
 
+        {/* Drop Category */}
+        <div>
+          <label className={labelClass}>Drop Category</label>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {PRODUCT_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, category: cat }))}
+                className={`px-3.5 py-2 text-xs tracking-wider uppercase rounded-sm border transition-all cursor-pointer ${
+                  form.category === cat
+                    ? 'bg-yellow-400 text-zinc-950 font-bold border-yellow-400 shadow-md scale-[1.02]'
+                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Color Attribute */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className={`${labelClass} mb-0`}>
+              Garment Colour / Color <span className="text-yellow-400 font-bold tracking-normal">(Variant Attribute)</span>
+            </label>
+            {form.color && (
+              <span className="text-yellow-400 text-xs font-mono font-bold uppercase tracking-wider">
+                Selected: {form.color}
+              </span>
+            )}
+          </div>
+
+          {/* Quick Color Swatches / Presets */}
+          <div className="flex flex-wrap gap-2 mb-3 pt-1">
+            {COLOR_SUGGESTIONS.map((col) => {
+              const isSelected = (form.color || '').trim().toLowerCase() === col.name.toLowerCase()
+              return (
+                <button
+                  key={col.name}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, color: col.name }))}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium tracking-wider border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-yellow-400 text-zinc-950 font-bold border-yellow-400 shadow-md scale-[1.02]'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700'
+                  }`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full border border-black/40 shadow-sm shrink-0"
+                    style={{ backgroundColor: col.hex }}
+                  />
+                  <span>{col.name}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Custom Color Input */}
+          <div className="relative">
+            <input
+              type="text"
+              name="color"
+              value={form.color}
+              onChange={handleChange}
+              placeholder="Or type custom colour (e.g. Sage Green, Electric Blue, Mauve)..."
+              className={inputClass}
+            />
+            {form.color && (
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, color: '' }))}
+                className="absolute right-0 bottom-3 text-zinc-500 hover:text-white text-xs uppercase tracking-wider cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <p className="text-zinc-600 text-[11px] mt-1.5">
+            Uploaded photos will be tied to this colour so buyers can view photos by selecting this colour.
+          </p>
+        </div>
+
         {/* Description */}
         <div>
           <label className={labelClass}>Description</label>
@@ -125,39 +244,56 @@ const CreateProduct = () => {
           />
         </div>
 
-        {/* Price */}
-        <div>
-          <label className={labelClass}>Price</label>
-          <div className="flex items-end gap-6">
-            <div className="relative shrink-0">
-              <select
-                name="priceCurrency"
-                value={form.priceCurrency}
-                onChange={handleChange}
-                className="appearance-none bg-transparent border-b border-zinc-800 text-white text-sm py-3 pr-7 focus:outline-none focus:border-yellow-400 transition-colors duration-300 cursor-pointer"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c} className="bg-[#0a0a0a] text-white">{c}</option>
-                ))}
-              </select>
-              <span className="absolute right-0 bottom-3.5 text-zinc-600 text-xs pointer-events-none">▾</span>
+        {/* Commercial Details: Price & Initial Stock */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          {/* Price */}
+          <div>
+            <label className={labelClass}>Price</label>
+            <div className="flex items-end gap-4">
+              <div className="relative shrink-0">
+                <select
+                  name="priceCurrency"
+                  value={form.priceCurrency}
+                  onChange={handleChange}
+                  className="appearance-none bg-transparent border-b border-zinc-800 text-white text-sm py-3 pr-7 focus:outline-none focus:border-yellow-400 transition-colors duration-300 cursor-pointer"
+                >
+                  {CURRENCIES.map((c) => (
+                    <option key={c} value={c} className="bg-[#0a0a0a] text-white">{c}</option>
+                  ))}
+                </select>
+                <span className="absolute right-0 bottom-3.5 text-zinc-600 text-xs pointer-events-none">▾</span>
+              </div>
+              <div className="relative flex-1">
+                <span className="absolute left-0 bottom-3 text-zinc-400 text-sm pointer-events-none select-none">
+                  {CURRENCY_SYMBOLS[form.priceCurrency]}
+                </span>
+                <input
+                  type="number"
+                  name="priceAmount"
+                  value={form.priceAmount}
+                  onChange={handleChange}
+                  placeholder="0.00"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  className={`${inputClass} pl-6`}
+                />
+              </div>
             </div>
-            <div className="relative flex-1">
-              <span className="absolute left-0 bottom-3 text-zinc-400 text-sm pointer-events-none select-none">
-                {CURRENCY_SYMBOLS[form.priceCurrency]}
-              </span>
-              <input
-                type="number"
-                name="priceAmount"
-                value={form.priceAmount}
-                onChange={handleChange}
-                placeholder="0.00"
-                min="0.01"
-                step="0.01"
-                required
-                className={`${inputClass} pl-6`}
-              />
-            </div>
+          </div>
+
+          {/* Initial Stock */}
+          <div>
+            <label className={labelClass}>Initial Stock (Units)</label>
+            <input
+              type="number"
+              name="stock"
+              value={form.stock}
+              onChange={handleChange}
+              placeholder="e.g. 25"
+              min="0"
+              className={inputClass}
+            />
           </div>
         </div>
 

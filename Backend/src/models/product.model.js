@@ -9,6 +9,14 @@ const productSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    category: {
+        type: String,
+        default: "TSHIRTS"
+    },
+    color: {
+        type: String,
+        default: ""
+    },
     seller: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "user",

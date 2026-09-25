@@ -129,7 +129,7 @@ const ProductDetail = () => {
                 setSelectedAttributes(initCustomAttrs)
               }
             } else {
-              setSelectedSize('M')
+              setSelectedSize(null)
               setSelectedVariantId(null)
               setSelectedAttributes({})
             }
@@ -197,15 +197,16 @@ const ProductDetail = () => {
   } = useMemo(() => {
     const variants = product?.variants || []
     const hasVars = variants.length > 0
-    const total = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+    const total = variants.reduce((sum, v) => sum + (Math.max(0, Number(v.stock) || 0)), 0)
 
     const STANDARD_SIZES = ['S', 'M', 'L', 'XL', 'XXL']
 
     if (!hasVars) {
-      // Default fallback sizes for products without variants
+      // Products without variants: stock is strictly based on product.stock or 0
+      const baseStock = Math.max(0, Number(product?.stock) || 0)
       const fallbackSizes = STANDARD_SIZES.map((size) => ({
         size,
-        stock: 50,
+        stock: baseStock,
         hasVariant: false,
         variant: null,
       }))
@@ -214,10 +215,10 @@ const ProductDetail = () => {
         availableSizes: fallbackSizes,
         availableColors: [],
         otherAttributeGroups: [],
-        hasSizeAttribute: true,
+        hasSizeAttribute: false,
         selectedVariant: null,
-        currentStock: 50,
-        totalStock: 50,
+        currentStock: baseStock,
+        totalStock: baseStock,
         hasRealVariants: false,
       }
     }
@@ -250,14 +251,26 @@ const ProductDetail = () => {
         values: Array.from(allAttrValuesMap[k] || []),
       }))
 
-    // Build size list from variants if size attribute exists
-    const sizeMap = new Map()
+    // Build color list across all variants
     const colorSet = new Set()
-
     variants.forEach((v) => {
-      const sizeVal = getVariantAttribute(v, 'size')
-      const colorVal = getVariantAttribute(v, 'color')
+      const colorVal = getVariantAttribute(v, 'color') || getVariantAttribute(v, 'colour')
       if (colorVal) colorSet.add(colorVal)
+    })
+
+    // Filter variants strictly for the currently selected color if product has colors
+    const activeColorVariants = (hasColor && selectedColor)
+      ? variants.filter((v) => {
+          const c = getVariantAttribute(v, 'color') || getVariantAttribute(v, 'colour')
+          return c && String(c).trim().toLowerCase() === String(selectedColor).trim().toLowerCase()
+        })
+      : variants
+
+    // Build size list strictly from the active color's variants
+    const sizeMap = new Map()
+
+    activeColorVariants.forEach((v) => {
+      const sizeVal = getVariantAttribute(v, 'size')
 
       if (hasSize) {
         const normalizedSize = sizeVal ? String(sizeVal).trim().toUpperCase() : 'FREE SIZE'
@@ -293,17 +306,23 @@ const ProductDetail = () => {
     // Active variant matching
     let activeVar = null
     if (selectedVariantId) {
-      activeVar = variants.find((v) => v._id === selectedVariantId)
+      const candidate = variants.find((v) => v._id === selectedVariantId)
+      if (candidate) {
+        if (hasColor && selectedColor) {
+          const c = getVariantAttribute(candidate, 'color') || getVariantAttribute(candidate, 'colour')
+          if (c && String(c).trim().toLowerCase() === String(selectedColor).trim().toLowerCase()) {
+            activeVar = candidate
+          }
+        } else {
+          activeVar = candidate
+        }
+      }
     }
     if (!activeVar) {
-      activeVar = variants.find((v) => {
+      activeVar = activeColorVariants.find((v) => {
         if (hasSize && selectedSize) {
           const s = getVariantAttribute(v, 'size')
           if (s && String(s).trim().toUpperCase() !== selectedSize.toUpperCase()) return false
-        }
-        if (hasColor && selectedColor) {
-          const c = getVariantAttribute(v, 'color')
-          if (c && c !== selectedColor) return false
         }
         for (const grp of otherGroups) {
           const selVal = selectedAttributes[grp.key]
@@ -317,6 +336,9 @@ const ProductDetail = () => {
     }
     if (!activeVar && sortedSizes.length > 0) {
       activeVar = sortedSizes[0].variant
+    }
+    if (!activeVar && activeColorVariants.length > 0) {
+      activeVar = activeColorVariants[0]
     }
     if (!activeVar && variants.length > 0) {
       activeVar = variants[0]
@@ -366,26 +388,30 @@ const ProductDetail = () => {
 
   const handleSelectColor = (color) => {
     setSelectedColor(color)
-    const matched =
-      product?.variants?.find((v) => {
-        const c = getVariantAttribute(v, 'color')
-        if (c && c !== color) return false
-        if (selectedSize) {
-          const s = getVariantAttribute(v, 'size')
-          if (s && String(s).trim().toUpperCase() !== selectedSize.toUpperCase()) return false
-        }
-        for (const [k, val] of Object.entries(selectedAttributes)) {
-          if (val) {
-            const vVal = getVariantAttribute(v, k)
-            if (vVal && String(vVal).toLowerCase() !== String(val).toLowerCase()) return false
-          }
-        }
-        return true
-      }) ||
-      product?.variants?.find((v) => {
-        const c = getVariantAttribute(v, 'color')
-        return c === color
-      })
+
+    // Filter variants that belong to this newly selected color
+    const variantsForColor = (product?.variants || []).filter((v) => {
+      const c = getVariantAttribute(v, 'color') || getVariantAttribute(v, 'colour')
+      return c && String(c).trim().toLowerCase() === String(color).trim().toLowerCase()
+    })
+
+    // Check if the current selectedSize exists for this new color
+    let matched = variantsForColor.find((v) => {
+      if (selectedSize) {
+        const s = getVariantAttribute(v, 'size')
+        if (s && String(s).trim().toUpperCase() === selectedSize.toUpperCase()) return true
+      }
+      return false
+    })
+
+    // If current selectedSize does NOT exist in this color, auto-switch selectedSize to the first size of this color
+    if (!matched && variantsForColor.length > 0) {
+      matched = variantsForColor.find((v) => Number(v.stock) > 0) || variantsForColor[0]
+      const newSize = getVariantAttribute(matched, 'size')
+      if (newSize) {
+        setSelectedSize(String(newSize).trim().toUpperCase())
+      }
+    }
 
     if (matched) {
       setSelectedVariantId(matched._id)
@@ -436,15 +462,17 @@ const ProductDetail = () => {
   // Display label for active variant in buttons & notifications
   const variantDisplayLabel = useMemo(() => {
     if (!selectedVariant) {
-      return selectedSize ? `Size ${selectedSize}` : 'Default'
+      if (selectedSize) return `Size ${selectedSize}`
+      if (totalStock <= 0) return 'Garment'
+      return 'Standard Edition'
     }
     const attrs = getAttributesObject(selectedVariant.attributes)
     const entries = Object.entries(attrs)
     if (entries.length === 0) {
-      return selectedSize ? `Size ${selectedSize}` : 'Default'
+      return selectedSize ? `Size ${selectedSize}` : 'Standard Edition'
     }
     return entries.map(([k, v]) => `${v}`).join(' / ')
-  }, [selectedVariant, selectedSize])
+  }, [selectedVariant, selectedSize, totalStock])
 
   const showBagToast = (msg) => {
     setBagToast(msg)
@@ -476,18 +504,45 @@ const ProductDetail = () => {
     ? selectedVariant.price
     : product?.price
 
-  // Dynamic gallery images: show selected variant's images if available, otherwise fallback to drop images
+  // Dynamic gallery images: strictly governed by selectedColor (does NOT change when clicking sizes)
   const activeImages = useMemo(() => {
-    if (selectedVariant?.images && selectedVariant.images.length > 0) {
-      return selectedVariant.images
-    }
-    return product?.images || []
-  }, [selectedVariant, product])
+    if (!product) return []
 
-  // Reset gallery active index to 0 whenever selected variant changes
+    // 1. If color is selected, find images corresponding to this color across variants
+    if (selectedColor && product.variants && product.variants.length > 0) {
+      const colorVariantWithImages = product.variants.find((v) => {
+        const c = getVariantAttribute(v, 'color') || getVariantAttribute(v, 'colour')
+        return (
+          c &&
+          String(c).trim().toLowerCase() === String(selectedColor).trim().toLowerCase() &&
+          v.images &&
+          v.images.length > 0
+        )
+      })
+
+      if (colorVariantWithImages?.images && colorVariantWithImages.images.length > 0) {
+        return colorVariantWithImages.images
+      }
+    }
+
+    // 2. If no color or color variant has no specific images, fallback to product images
+    if (product.images && product.images.length > 0) {
+      return product.images
+    }
+
+    // 3. Fallback to any variant with images
+    const anyVariantWithImages = product.variants?.find((v) => v.images && v.images.length > 0)
+    if (anyVariantWithImages?.images && anyVariantWithImages.images.length > 0) {
+      return anyVariantWithImages.images
+    }
+
+    return []
+  }, [product, selectedColor])
+
+  // Reset gallery active index to 0 ONLY when selected color or product changes (NOT when size changes)
   useEffect(() => {
     setActiveImageIndex(0)
-  }, [selectedVariantId])
+  }, [selectedColor, productId])
 
   const getDisplayImageUrl = (img) => {
     if (!img) return null
@@ -503,10 +558,16 @@ const ProductDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans selection:bg-yellow-400 selection:text-black">
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans relative overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+      {/* Ambient background glows */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.035)_0%,transparent_70%)] pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.025)_0%,transparent_70%)] pointer-events-none" />
+
       {/* ── TOP ANNOUNCEMENT BAR ── */}
-      <div className="bg-yellow-400 text-zinc-950 px-4 py-2 text-center text-[11px] font-black tracking-[0.25em] uppercase select-none">
-        <span>Complimentary Express Shipping On All Premium Drops</span>
+      <div className="bg-zinc-950 border-b border-zinc-900/80 py-2 px-4 text-center relative z-10">
+        <p className="text-[11px] tracking-[0.25em] text-zinc-400 uppercase font-medium">
+          Complimentary Express Shipping On All Premium Drops
+        </p>
       </div>
 
       {/* ── NAVBAR ── */}
@@ -519,7 +580,7 @@ const ProductDetail = () => {
               alt="Snitch Logo"
               className="w-8 h-8 sm:w-9 sm:h-9 object-contain group-hover:rotate-6 transition-transform duration-300"
             />
-            <span className="text-white text-xl sm:text-2xl font-black tracking-[0.25em] uppercase group-hover:text-yellow-400 transition-colors">
+            <span className="text-white text-xl sm:text-2xl font-black tracking-[0.25em] uppercase group-hover:text-white transition-colors">
               Snitch
             </span>
           </Link>
@@ -546,9 +607,9 @@ const ProductDetail = () => {
                 {user.role === 'seller' && (
                   <Link
                     to="/seller/dashboard"
-                    className="text-xs tracking-wider uppercase text-yellow-400 hover:text-yellow-300 font-semibold hidden sm:flex items-center gap-1.5 transition-colors"
+                    className="text-xs tracking-wider uppercase text-zinc-300 hover:text-white font-semibold hidden sm:flex items-center gap-1.5 transition-colors"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     <span>Seller Studio</span>
                   </Link>
                 )}
@@ -560,7 +621,7 @@ const ProductDetail = () => {
                     onClick={() => setIsUserDropdownOpen((prev) => !prev)}
                     className="flex items-center gap-2 p-1 -m-1 rounded-sm hover:bg-zinc-900/60 transition-colors cursor-pointer group select-none"
                   >
-                    <div className="w-8 h-8 rounded-full bg-yellow-400/10 border border-yellow-400/30 group-hover:border-yellow-400/60 flex items-center justify-center text-yellow-400 font-bold text-xs uppercase transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-zinc-500 flex items-center justify-center text-zinc-200 font-bold text-xs uppercase transition-colors">
                       {user.fullname ? user.fullname[0] : 'U'}
                     </div>
                     <span className="text-zinc-300 group-hover:text-white text-xs hidden sm:inline font-medium transition-colors">
@@ -568,7 +629,7 @@ const ProductDetail = () => {
                     </span>
                     <svg
                       className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${
-                        isUserDropdownOpen ? 'rotate-180 text-yellow-400' : ''
+                        isUserDropdownOpen ? 'rotate-180 text-white' : ''
                       }`}
                       fill="none"
                       stroke="currentColor"
@@ -584,7 +645,7 @@ const ProductDetail = () => {
                       <div className="px-4 py-2.5 border-b border-zinc-900">
                         <p className="text-white text-xs font-bold truncate">{user.fullname || 'Member'}</p>
                         <p className="text-zinc-500 text-[11px] truncate mt-0.5">{user.email}</p>
-                        <span className="inline-block mt-2 text-[9px] tracking-widest uppercase px-2 py-0.5 rounded-sm bg-zinc-900 text-yellow-400 border border-yellow-400/20 font-bold">
+                        <span className="inline-block mt-2 text-[9px] tracking-widest uppercase px-2 py-0.5 rounded-sm bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold">
                           {user.role}
                         </span>
                       </div>
@@ -597,9 +658,9 @@ const ProductDetail = () => {
                               setIsUserDropdownOpen(false)
                               setShowBecomeSellerModal(true)
                             }}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 rounded-sm transition-colors text-left font-medium cursor-pointer"
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 rounded-sm transition-colors text-left font-medium cursor-pointer"
                           >
-                            <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.614A2.993 2.993 0 009 9.35c.828 0 1.579-.336 2.122-.88a3.001 3.001 0 004.256 0 2.993 2.993 0 002.122.88 3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l2.19 2.19a3.004 3.004 0 01-.62 4.72" />
                             </svg>
                             <span>Become a Seller</span>
@@ -610,9 +671,9 @@ const ProductDetail = () => {
                           <Link
                             to="/seller/dashboard"
                             onClick={() => setIsUserDropdownOpen(false)}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 rounded-sm transition-colors text-left font-medium"
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 rounded-sm transition-colors text-left font-medium"
                           >
-                            <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
                             </svg>
                             <span>Seller Studio</span>
@@ -644,7 +705,7 @@ const ProductDetail = () => {
                   className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center"
                 >
                   <svg
-                    className="w-5 h-5 text-zinc-300 group-hover:text-yellow-400 transition-colors"
+                    className="w-5 h-5 text-zinc-300 group-hover:text-white transition-colors"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.75"
@@ -656,7 +717,7 @@ const ProductDetail = () => {
                       d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
                     />
                   </svg>
-                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-white text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
                     0
                   </span>
                 </button>
@@ -682,12 +743,12 @@ const ProductDetail = () => {
       </header>
 
       {/* ── MAIN CONTENT CONTAINER ── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-10">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-12 py-6 sm:py-10 relative z-10">
         {/* Breadcrumb Navigation */}
         <nav className="flex items-center gap-2 text-xs text-zinc-500 mb-6 sm:mb-8 tracking-wider uppercase">
-          <Link to="/" className="hover:text-yellow-400 transition-colors">Home</Link>
+          <Link to="/" className="hover:text-white transition-colors">Home</Link>
           <span>/</span>
-          <Link to="/" className="hover:text-yellow-400 transition-colors">Garments</Link>
+          <Link to="/" className="hover:text-white transition-colors">Garments</Link>
           <span>/</span>
           <span className="text-zinc-300 truncate max-w-[200px] sm:max-w-xs">
             {product?.title || 'Product Details'}
@@ -732,7 +793,7 @@ const ProductDetail = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 to="/"
-                className="w-full sm:w-auto bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black px-6 py-3.5 text-xs uppercase tracking-[0.2em] rounded-sm transition-all"
+                className="w-full sm:w-auto bg-white hover:bg-zinc-200 text-zinc-950 font-bold px-6 py-3.5 text-xs uppercase tracking-[0.2em] rounded-sm transition-all"
               >
                 Browse All Drops
               </Link>
@@ -764,7 +825,7 @@ const ProductDetail = () => {
                           prev > 0 ? prev - 1 : activeImages.length - 1
                         )
                       }
-                      className="w-full h-7 sm:h-8 rounded-sm border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-yellow-400 flex items-center justify-center transition-colors cursor-pointer select-none"
+                      className="w-full h-7 sm:h-8 rounded-sm border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer select-none"
                       title="Previous photo"
                     >
                       <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -787,7 +848,7 @@ const ProductDetail = () => {
                           onClick={() => setActiveImageIndex(i)}
                           className={`relative w-full aspect-[4/5] rounded-sm overflow-hidden border shrink-0 transition-all cursor-pointer ${
                             activeImageIndex === i
-                              ? 'border-yellow-400 ring-2 ring-yellow-400/50 opacity-100'
+                              ? 'border-white ring-1 ring-white/60 opacity-100'
                               : 'border-zinc-800 opacity-50 hover:opacity-100'
                           }`}
                           style={{ aspectRatio: '4 / 5' }}
@@ -811,7 +872,7 @@ const ProductDetail = () => {
                           prev < activeImages.length - 1 ? prev + 1 : 0
                         )
                       }
-                      className="w-full h-7 sm:h-8 rounded-sm border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-yellow-400 flex items-center justify-center transition-colors cursor-pointer select-none"
+                      className="w-full h-7 sm:h-8 rounded-sm border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer select-none"
                       title="Next photo"
                     >
                       <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -827,11 +888,31 @@ const ProductDetail = () => {
                 className="relative flex-1 min-w-0 aspect-[4/5] bg-zinc-900 rounded-sm overflow-hidden border border-zinc-900 select-none group"
                 style={{ aspectRatio: '4 / 5' }}
               >
+                {/* Sold Out / Out of Stock Image Stamp */}
+                {totalStock <= 0 ? (
+                  <div className="absolute top-4 left-4 z-20 bg-red-600/95 backdrop-blur-md border border-red-500/50 px-3.5 py-1.5 rounded-sm shadow-2xl flex items-center gap-2 text-white font-black text-[11px] tracking-[0.25em] uppercase">
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    <span>Sold Out</span>
+                  </div>
+                ) : currentStock <= 0 ? (
+                  <div className="absolute top-4 left-4 z-20 bg-red-600/95 backdrop-blur-md border border-red-500/50 px-3 py-1.5 rounded-sm shadow-2xl flex items-center gap-1.5 text-white font-black text-[10px] tracking-[0.2em] uppercase">
+                    <span className="w-2 h-2 rounded-full bg-white" />
+                    <span>{variantDisplayLabel} Out of Stock</span>
+                  </div>
+                ) : currentStock <= 5 ? (
+                  <div className="absolute top-4 left-4 z-20 bg-amber-500/90 text-white font-bold text-[10px] tracking-[0.2em] uppercase px-3 py-1.5 rounded-sm shadow-xl flex items-center gap-1.5 backdrop-blur-sm border border-amber-400/40">
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                    <span>Low Stock</span>
+                  </div>
+                ) : null}
+
                 {getDisplayImageUrl(activeImages[activeImageIndex]) ? (
                   <img
                     src={getDisplayImageUrl(activeImages[activeImageIndex])}
                     alt={product.title}
-                    className="w-full h-full object-cover object-top"
+                    className={`w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105 ${
+                      totalStock <= 0 ? 'opacity-70 grayscale-[25%]' : ''
+                    }`}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700">
@@ -883,10 +964,10 @@ const ProductDetail = () => {
                 )}
 
                 {/* Badge Tag on bottom left */}
-                <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md border border-yellow-400/20 px-3 py-1.5 rounded-sm flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                  <span className="text-yellow-400 text-[10px] font-black tracking-[0.25em] uppercase">
-                    {selectedVariant?.images?.length > 0 ? `Variant Gallery (${selectedVariant.images.length})` : 'Authentic Release'}
+                <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md border border-zinc-800 px-3 py-1.5 rounded-sm flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-zinc-300 text-[10px] font-bold tracking-[0.25em] uppercase">
+                    {selectedColor ? `${selectedColor} Edition (${activeImages.length})` : 'Authentic Release'}
                   </span>
                 </div>
               </div>
@@ -897,8 +978,8 @@ const ProductDetail = () => {
               <div>
                 {/* Release Category */}
                 <div className="mb-3">
-                  <span className="text-yellow-400 text-xs font-black tracking-[0.3em] uppercase">
-                    Snitch Limited Drop
+                  <span className="text-zinc-400 text-xs font-bold tracking-[0.25em] uppercase">
+                    {product.category ? `${product.category} Collection` : 'Snitch Limited Drop'}
                   </span>
                 </div>
 
@@ -907,10 +988,34 @@ const ProductDetail = () => {
                   {product.title}
                 </h1>
 
+                {/* Out of Stock Notice Banner */}
+                {totalStock <= 0 && (
+                  <div className="mt-4 p-4 rounded-sm bg-red-950/40 border border-red-500/40 flex items-start gap-3.5">
+                    <div className="w-8 h-8 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-red-400 text-xs font-black uppercase tracking-wider">
+                          Currently Sold Out
+                        </h4>
+                        <span className="text-[9px] px-2 py-0.5 rounded-sm bg-red-500/20 text-red-300 font-mono font-bold uppercase">
+                          0 Units Available
+                        </span>
+                      </div>
+                      <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                        {hasRealVariants
+                          ? 'All size and color variations for this garment are currently out of stock.'
+                          : 'This drop is currently sold out or undergoing inventory restock.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Price Display */}
                 <div className="mt-5 pb-6 border-b border-zinc-900">
                   <div className="flex items-baseline gap-3">
-                    <span className="text-yellow-400 text-4xl sm:text-5xl font-black tracking-tight">
+                    <span className="text-white text-4xl sm:text-5xl font-black tracking-tight">
                       {formatPrice(activePriceObj)}
                     </span>
                     <span className="text-zinc-500 text-xs tracking-wider uppercase">
@@ -920,14 +1025,19 @@ const ProductDetail = () => {
 
                   {/* Stock & Delivery Status */}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {currentStock > 10 ? (
+                    {totalStock <= 0 ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold uppercase tracking-wider">
+                        <span className="w-2 h-2 rounded-full bg-red-400" />
+                        <span>Sold Out • 0 Units in Stock</span>
+                      </span>
+                    ) : currentStock > 10 ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         <span>In Stock ({currentStock} Units • {variantDisplayLabel})</span>
                       </span>
                     ) : currentStock > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-bold uppercase tracking-wider">
-                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping" />
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
                         <span>Low Stock: Only {currentStock} Left for {variantDisplayLabel}!</span>
                       </span>
                     ) : (
@@ -936,87 +1046,83 @@ const ProductDetail = () => {
                         <span>Out of Stock • {variantDisplayLabel}</span>
                       </span>
                     )}
-
-                    {totalStock > 0 && hasRealVariants && (
-                      <span className="text-zinc-500 text-xs flex items-center gap-1">
-                        <span>•</span> {totalStock} Total Drop Stock
-                      </span>
-                    )}
                   </div>
                 </div>
 
                 {/* ── VARIANT & SIZE SELECTION SECTION ── */}
                 <div className="mt-6">
-                  {(hasSizeAttribute || !hasRealVariants) && (
+                  {hasSizeAttribute && availableSizes.length > 0 && (
                     <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-zinc-400 text-xs uppercase tracking-[0.2em] font-bold">
-                        Select Size
-                      </span>
-                      {selectedSize && (
-                        <span className="text-yellow-400 text-xs font-black tracking-widest uppercase">
-                          — {selectedSize}
-                        </span>
-                      )}
-                    </div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-zinc-400 text-xs uppercase tracking-[0.2em] font-bold">
+                            Select Size
+                          </span>
+                          {selectedSize && (
+                            <span className="text-white text-xs font-bold tracking-widest uppercase">
+                              — {selectedSize}
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Size Guide Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => setShowSizeGuideModal(true)}
-                      className="text-zinc-400 hover:text-yellow-400 text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer group select-none"
-                    >
-                      <svg className="w-4 h-4 text-zinc-500 group-hover:text-yellow-400 transition-colors" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                      </svg>
-                      <span className="underline underline-offset-4 decoration-zinc-700 group-hover:decoration-yellow-400">
-                        Size Guide
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Size Chips */}
-                  <div className="flex flex-wrap gap-2.5">
-                    {availableSizes.map((item) => {
-                      const isSelected = selectedSize === item.size
-                      const isSoldOut = item.hasVariant && item.stock <= 0
-                      const isFewLeft = item.hasVariant && item.stock > 0 && item.stock <= 5
-
-                      return (
+                        {/* Size Guide Trigger */}
                         <button
-                          key={item.size}
                           type="button"
-                          onClick={() => handleSelectSize(item)}
-                          className={`min-w-[56px] h-12 px-3.5 rounded-sm border text-xs uppercase font-black transition-all flex flex-col items-center justify-center relative cursor-pointer select-none ${
-                            isSelected
-                              ? 'bg-yellow-400 text-zinc-950 border-yellow-400 shadow-lg shadow-yellow-400/20 scale-[1.03] z-10'
-                              : isSoldOut
-                              ? 'bg-zinc-950/40 text-zinc-600 border-zinc-900 opacity-60 hover:opacity-80'
-                              : 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200 border-zinc-800 hover:border-zinc-600'
-                          }`}
+                          onClick={() => setShowSizeGuideModal(true)}
+                          className="text-zinc-400 hover:text-white text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer group select-none"
                         >
-                          <span className={isSoldOut ? 'line-through' : ''}>{item.size}</span>
-                          {isFewLeft && (
-                            <span
-                              className={`text-[8px] font-bold tracking-tight leading-none mt-0.5 ${
-                                isSelected ? 'text-zinc-950' : 'text-yellow-400'
+                          <svg className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                          </svg>
+                          <span className="underline underline-offset-4 decoration-zinc-700 group-hover:decoration-white">
+                            Size Guide
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Size Chips */}
+                      <div className="flex flex-wrap gap-2.5">
+                        {availableSizes.map((item) => {
+                          const isSelected = selectedSize === item.size
+                          const isSoldOut = item.hasVariant ? item.stock <= 0 : totalStock <= 0
+                          const isFewLeft = item.hasVariant && item.stock > 0 && item.stock <= 5
+
+                          return (
+                            <button
+                              key={item.size}
+                              type="button"
+                              onClick={() => handleSelectSize(item)}
+                              className={`min-w-[56px] h-12 px-3.5 rounded-sm border text-xs uppercase font-black transition-all flex flex-col items-center justify-center relative cursor-pointer select-none ${
+                                isSoldOut && isSelected
+                                  ? 'bg-zinc-900 border-red-500/70 text-red-400 ring-1 ring-red-500/50 z-10'
+                                  : isSelected
+                                  ? 'bg-yellow-400 text-zinc-950 border-yellow-400 shadow-lg shadow-yellow-400/20 scale-[1.03] z-10'
+                                  : isSoldOut
+                                  ? 'bg-zinc-950/40 text-zinc-600 border-zinc-900 line-through opacity-50 hover:opacity-75'
+                                  : 'bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200 border-zinc-800 hover:border-zinc-600'
                               }`}
                             >
-                              {item.stock} left
-                            </span>
-                          )}
-                          {isSoldOut && (
-                            <span className="text-[7.5px] text-zinc-500 font-semibold tracking-tighter leading-none mt-0.5">
-                              Sold out
-                            </span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
+                              <span className={isSoldOut ? 'line-through text-zinc-500' : ''}>{item.size}</span>
+                              {isFewLeft && (
+                                <span
+                                  className={`text-[8px] font-bold tracking-tight leading-none mt-0.5 ${
+                                    isSelected ? 'text-zinc-950' : 'text-amber-400'
+                                  }`}
+                                >
+                                  {item.stock} left
+                                </span>
+                              )}
+                              {isSoldOut && (
+                                <span className="text-[7.5px] text-red-400 font-semibold tracking-tighter leading-none mt-0.5">
+                                  Sold out
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Color Selection if available */}
                   {availableColors.length > 0 && (
@@ -1045,7 +1151,7 @@ const ProductDetail = () => {
                               onClick={() => handleSelectColor(color)}
                               className={`px-3 py-1.5 rounded-sm border text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
                                 isColorActive
-                                  ? 'border-yellow-400 bg-yellow-400/10 text-yellow-400'
+                                  ? 'border-white bg-zinc-800 text-white font-bold ring-1 ring-white/40'
                                   : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-white'
                               }`}
                             >
@@ -1075,7 +1181,7 @@ const ProductDetail = () => {
                               <span className="text-zinc-400 text-[11px] uppercase tracking-[0.2em] font-bold">
                                 {group.label}:
                               </span>
-                              <span className="text-yellow-400 text-xs font-mono font-bold">
+                              <span className="text-white text-xs font-mono font-bold">
                                 {activeVal}
                               </span>
                             </div>
@@ -1089,7 +1195,7 @@ const ProductDetail = () => {
                                     onClick={() => handleSelectCustomAttribute(group.key, val)}
                                     className={`px-3 py-1.5 rounded-sm border text-xs font-mono font-semibold uppercase tracking-wider transition-all cursor-pointer ${
                                       isAttrActive
-                                        ? 'border-yellow-400 bg-yellow-400/10 text-yellow-400 font-bold'
+                                        ? 'border-white bg-zinc-800 text-white font-bold ring-1 ring-white/40'
                                         : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-white'
                                     }`}
                                   >
@@ -1106,7 +1212,19 @@ const ProductDetail = () => {
 
                   {/* Stock Card / Urgency Info */}
                   <div className="mt-4 p-3.5 rounded-sm bg-zinc-950/60 border border-zinc-900">
-                    {currentStock > 10 ? (
+                    {totalStock <= 0 ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-red-500" />
+                          <span className="text-red-400 text-xs font-bold tracking-wider uppercase">
+                            Drop Completely Sold Out
+                          </span>
+                        </div>
+                        <span className="text-zinc-500 text-[11px]">
+                          0 units available in warehouse
+                        </span>
+                      </div>
+                    ) : currentStock > 10 ? (
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
                           <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -1123,20 +1241,20 @@ const ProductDetail = () => {
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-2">
                             <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-400"></span>
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                             </span>
-                            <span className="text-yellow-400 text-xs font-black tracking-wider uppercase">
+                            <span className="text-amber-400 text-xs font-bold tracking-wider uppercase">
                               Low Stock Alert
                             </span>
                           </div>
-                          <span className="text-yellow-400 text-xs font-mono font-bold">
+                          <span className="text-amber-400 text-xs font-mono font-bold">
                             Only {currentStock} unit{currentStock > 1 ? 's' : ''} left for {variantDisplayLabel}!
                           </span>
                         </div>
                         <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className="bg-yellow-400 h-full rounded-full transition-all duration-300"
+                            className="bg-amber-400 h-full rounded-full transition-all duration-300"
                             style={{ width: `${Math.min(100, (currentStock / 10) * 100)}%` }}
                           />
                         </div>
@@ -1167,7 +1285,7 @@ const ProductDetail = () => {
                       Quantity
                     </span>
                     {currentStock > 0 && currentStock <= 10 && (
-                      <span className="text-yellow-400/80 text-[10px] mt-0.5">
+                      <span className="text-zinc-400 text-[10px] mt-0.5">
                         (Max {Math.min(currentStock, 10)} per customer)
                       </span>
                     )}
@@ -1197,7 +1315,7 @@ const ProductDetail = () => {
 
                 {/* ── ACTION BUTTONS: ADD TO BAG & BUY NOW ── */}
                 <div className="mt-8 space-y-3">
-                  {currentStock > 0 ? (
+                  {currentStock > 0 && totalStock > 0 ? (
                     <>
                       {/* Buy Now Button (High Priority CTA) */}
                       <button
@@ -1215,7 +1333,7 @@ const ProductDetail = () => {
                       <button
                         type="button"
                         onClick={() => showBagToast(`Added ${quantity} × ${variantDisplayLabel} to your bag!`)}
-                        className="w-full border-2 border-zinc-700 hover:border-yellow-400/80 bg-zinc-900/60 hover:bg-zinc-900 text-white font-bold py-4 px-6 text-xs sm:text-sm tracking-[0.2em] uppercase rounded-sm transition-all duration-200 cursor-pointer flex items-center justify-center gap-2.5"
+                        className="w-full border-2 border-zinc-700 hover:border-white bg-zinc-900/60 hover:bg-zinc-800 text-white font-bold py-4 px-6 text-xs sm:text-sm tracking-[0.2em] uppercase rounded-sm transition-all duration-200 cursor-pointer flex items-center justify-center gap-2.5"
                       >
                         <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -1224,34 +1342,26 @@ const ProductDetail = () => {
                       </button>
                     </>
                   ) : (
-                    <>
-                      {/* Out of Stock State */}
-                      <button
-                        type="button"
-                        disabled
-                        className="w-full bg-zinc-900 border border-zinc-800 text-zinc-500 font-black py-4 px-6 text-xs sm:text-sm tracking-[0.25em] uppercase rounded-sm cursor-not-allowed opacity-60 flex items-center justify-center gap-2"
-                      >
-                        <span>{variantDisplayLabel} Out of Stock</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => showBagToast(`We will notify you when ${variantDisplayLabel} is restocked!`)}
-                        className="w-full border border-zinc-800 hover:border-yellow-400/50 bg-zinc-900/40 text-yellow-400 font-bold py-4 px-6 text-xs sm:text-sm tracking-[0.2em] uppercase rounded-sm transition-all cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                        </svg>
-                        <span>Notify Me When Restocked</span>
-                      </button>
-                    </>
+                    /* Out of Stock State - Only Out of Stock button */
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full bg-zinc-900 border border-red-500/40 text-red-400 font-black py-4 px-6 text-xs sm:text-sm tracking-[0.25em] uppercase rounded-sm cursor-not-allowed flex items-center justify-center gap-2 shadow-inner"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-400" />
+                      <span>
+                        {totalStock <= 0
+                          ? 'Drop Sold Out / Out of Stock'
+                          : `${variantDisplayLabel} Out of Stock`}
+                      </span>
+                    </button>
                   )}
                 </div>
 
                 {/* Trust Highlights Grid */}
                 <div className="grid grid-cols-2 gap-4 mt-8 pt-6 border-t border-zinc-900 text-zinc-400 text-xs">
                   <div className="flex items-start gap-2.5">
-                    <svg className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.948c0-.621-.504-1.125-1.125-1.125H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V14.25" />
                     </svg>
                     <div>
@@ -1261,7 +1371,7 @@ const ProductDetail = () => {
                   </div>
 
                   <div className="flex items-start gap-2.5">
-                    <svg className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                     </svg>
                     <div>
@@ -1287,7 +1397,7 @@ const ProductDetail = () => {
       </main>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-zinc-900 bg-zinc-950/80 py-12 px-4 sm:px-6 lg:px-12 mt-16">
+      <footer className="border-t border-zinc-900 bg-zinc-950/80 py-12 px-4 sm:px-6 lg:px-12 mt-16 relative z-10">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -1300,9 +1410,9 @@ const ProductDetail = () => {
           </div>
 
           <div className="flex flex-wrap gap-8 text-xs tracking-wider uppercase text-zinc-400">
-            <Link to="/" className="hover:text-yellow-400 transition-colors">Home</Link>
-            <Link to="/register" className="hover:text-yellow-400 transition-colors">Join Club</Link>
-            <Link to="/login" className="hover:text-yellow-400 transition-colors">Sign In</Link>
+            <Link to="/" className="hover:text-white transition-colors">Home</Link>
+            <Link to="/register" className="hover:text-white transition-colors">Join Club</Link>
+            <Link to="/login" className="hover:text-white transition-colors">Sign In</Link>
           </div>
         </div>
 
@@ -1333,8 +1443,8 @@ const ProductDetail = () => {
 
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 mb-3">
-                <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-                <span className="text-yellow-400 text-[10px] tracking-[0.3em] uppercase font-bold">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-zinc-400 text-[10px] tracking-[0.3em] uppercase font-bold">
                   Seller Studio
                 </span>
               </div>
@@ -1363,7 +1473,7 @@ const ProductDetail = () => {
                 type="button"
                 disabled={upgradingToSeller}
                 onClick={handleBecomeSellerConfirm}
-                className="flex-1 py-3 px-4 bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 text-xs tracking-wider uppercase font-bold rounded-sm transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                className="flex-1 py-3 px-4 bg-white hover:bg-zinc-200 active:scale-[0.98] text-zinc-950 text-xs tracking-wider uppercase font-bold rounded-sm transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {upgradingToSeller ? (
                   <>
@@ -1398,8 +1508,8 @@ const ProductDetail = () => {
             </button>
 
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-              <span className="text-yellow-400 text-[10px] tracking-[0.3em] uppercase font-bold">
+              <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-pulse" />
+              <span className="text-zinc-400 text-[10px] tracking-[0.3em] uppercase font-bold">
                 Snitch Fit Guide
               </span>
             </div>
@@ -1414,7 +1524,7 @@ const ProductDetail = () => {
                 type="button"
                 onClick={() => setSizeGuideUnit('in')}
                 className={`px-3 py-1 text-xs font-bold rounded-sm uppercase tracking-wider transition-colors cursor-pointer ${
-                  sizeGuideUnit === 'in' ? 'bg-yellow-400 text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-white'
+                  sizeGuideUnit === 'in' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-white'
                 }`}
               >
                 Inches (in)
@@ -1423,7 +1533,7 @@ const ProductDetail = () => {
                 type="button"
                 onClick={() => setSizeGuideUnit('cm')}
                 className={`px-3 py-1 text-xs font-bold rounded-sm uppercase tracking-wider transition-colors cursor-pointer ${
-                  sizeGuideUnit === 'cm' ? 'bg-yellow-400 text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-white'
+                  sizeGuideUnit === 'cm' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-white'
                 }`}
               >
                 Centimeters (cm)
@@ -1453,12 +1563,12 @@ const ProductDetail = () => {
                     <div
                       key={row.size}
                       className={`grid grid-cols-4 px-4 py-2.5 transition-colors ${
-                        isRowSelected ? 'bg-yellow-400/10 text-yellow-400 font-bold' : 'text-zinc-300 hover:bg-zinc-900/30'
+                        isRowSelected ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-300 hover:bg-zinc-900/30'
                       }`}
                     >
                       <div className="font-black flex items-center gap-1.5">
                         <span>{row.size}</span>
-                        {isRowSelected && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
+                        {isRowSelected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
                       <div>{vals[0]} {sizeGuideUnit}</div>
                       <div>{vals[1]} {sizeGuideUnit}</div>
@@ -1470,7 +1580,7 @@ const ProductDetail = () => {
             </div>
 
             <div className="mt-5 p-3 bg-zinc-900/40 border border-zinc-800/80 rounded-sm flex items-start gap-2.5 text-[11px] text-zinc-400">
-              <svg className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
               </svg>
               <span>
@@ -1483,8 +1593,8 @@ const ProductDetail = () => {
 
       {/* ── BAG / ACTION TOAST NOTIFICATION ── */}
       {bagToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#121212] border border-yellow-400/40 text-white px-5 py-3.5 rounded-sm shadow-2xl flex items-center gap-3 backdrop-blur-md">
-          <div className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
+        <div className="fixed bottom-6 right-6 z-50 bg-[#121212] border border-zinc-800 text-white px-5 py-3.5 rounded-sm shadow-2xl flex items-center gap-3 backdrop-blur-md">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
           <span className="text-xs font-bold tracking-wide">{bagToast}</span>
         </div>
       )}

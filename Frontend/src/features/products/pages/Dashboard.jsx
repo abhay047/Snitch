@@ -113,6 +113,13 @@ const Dashboard = () => {
     return item?.url || null
   }
 
+  const getProductStock = (product) => {
+    if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      return product.variants.reduce((acc, v) => acc + Math.max(0, Number(v.stock) || 0), 0)
+    }
+    return Math.max(0, Number(product?.stock) || 0)
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative overflow-hidden">
       {/* Background ambient radial glow */}
@@ -407,6 +414,7 @@ const Dashboard = () => {
             {filteredProducts.map((product) => {
               const primaryImg = getProductImage(product, 0)
               const imageCount = product.images?.length || 0
+              const totalStock = getProductStock(product)
 
               return (
                 <div
@@ -418,11 +426,29 @@ const Dashboard = () => {
                 >
                   {/* Image container */}
                   <div className="relative aspect-[3/4] bg-zinc-900/60 overflow-hidden">
+                    {/* Stock status pill */}
+                    {totalStock <= 0 ? (
+                      <div className="absolute top-2.5 left-2.5 bg-red-600/90 backdrop-blur-sm border border-red-500/50 px-2 py-0.5 rounded-sm text-[9px] tracking-wider text-white font-bold uppercase flex items-center gap-1 z-10 shadow-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        <span>0 Stock (Out)</span>
+                      </div>
+                    ) : totalStock <= 10 ? (
+                      <div className="absolute top-2.5 left-2.5 bg-yellow-400/90 backdrop-blur-sm border border-yellow-300 px-2 py-0.5 rounded-sm text-[9px] tracking-wider text-zinc-950 font-black uppercase flex items-center gap-1 z-10 shadow-md">
+                        <span>Low ({totalStock})</span>
+                      </div>
+                    ) : (
+                      <div className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-sm border border-emerald-500/40 px-2 py-0.5 rounded-sm text-[9px] tracking-wider text-emerald-400 font-bold uppercase z-10">
+                        <span>{totalStock} in stock</span>
+                      </div>
+                    )}
+
                     {primaryImg ? (
                       <img
                         src={primaryImg}
                         alt={product.title}
-                        className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                        className={`w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105 ${
+                          totalStock <= 0 ? 'opacity-70 grayscale-[25%]' : ''
+                        }`}
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700">
@@ -483,6 +509,7 @@ const Dashboard = () => {
             {filteredProducts.map((product) => {
               const primaryImg = getProductImage(product, 0)
               const imageCount = product.images?.length || 0
+              const totalStock = getProductStock(product)
 
               return (
                 <div
@@ -530,6 +557,14 @@ const Dashboard = () => {
                         <span>Listed: {formatDate(product.createdAt)}</span>
                         <span>•</span>
                         <span>{imageCount} photo{imageCount !== 1 ? 's' : ''}</span>
+                        <span>•</span>
+                        {totalStock <= 0 ? (
+                          <span className="text-red-400 font-bold">0 stock (out)</span>
+                        ) : totalStock <= 10 ? (
+                          <span className="text-yellow-400 font-bold">Low ({totalStock})</span>
+                        ) : (
+                          <span className="text-emerald-400 font-medium">{totalStock} in stock</span>
+                        )}
                       </div>
                     </div>
                   </div>

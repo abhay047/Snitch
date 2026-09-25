@@ -12,7 +12,94 @@ const CURRENCY_SYMBOLS = {
   JPY: '¥',
 }
 
-const CATEGORIES = ['All', 'Streetwear', 'Oversized', 'Luxury', 'Hoodies', 'Tees', 'Bottoms']
+const CATEGORIES = ['ALL', 'TSHIRTS', 'SHIRTS', 'JEANS', 'HOODIES', 'OVERSIZED', 'OTHER']
+
+// Smart Category Matcher: checks product.category, variant attributes, and semantic clothing patterns
+const matchesCategory = (product, selectedCategory) => {
+  if (!selectedCategory) return true
+  const sel = selectedCategory.trim().toUpperCase()
+  if (sel === 'ALL') return true
+
+  const prodCategory = (product?.category || '').trim().toUpperCase()
+
+  // 1. Direct match with product.category
+  if (prodCategory) {
+    if (prodCategory === sel) return true
+    if (sel === 'TSHIRTS' && ['TSHIRTS', 'TSHIRT', 'T-SHIRT', 'T-SHIRTS', 'TEES', 'TEE', 'POLO'].includes(prodCategory)) return true
+    if (sel === 'SHIRTS' && ['SHIRTS', 'SHIRT', 'OVERSHIRT', 'FLANNEL'].includes(prodCategory)) return true
+    if (sel === 'JEANS' && ['JEANS', 'JEAN', 'DENIM', 'BOTTOMS', 'BOTTOM', 'PANTS', 'PANT', 'TROUSERS', 'TROUSER'].includes(prodCategory)) return true
+    if (sel === 'HOODIES' && ['HOODIES', 'HOODIE', 'SWEATSHIRT', 'SWEATSHIRTS'].includes(prodCategory)) return true
+    if ((sel === 'OVERSIZED' || sel === 'OVERSIZZED') && ['OVERSIZED', 'OVERSIZE', 'OVERSIZZED', 'OVERSIZZE'].includes(prodCategory)) return true
+  }
+
+  // 2. Check variant attributes (category, type, fit, style)
+  if (product?.variants && Array.isArray(product.variants)) {
+    for (const v of product.variants) {
+      if (v?.attributes) {
+        let attrs = {}
+        try {
+          if (v.attributes instanceof Map) {
+            attrs = Object.fromEntries(v.attributes.entries())
+          } else if (typeof v.attributes === 'object') {
+            attrs = v.attributes
+          }
+        } catch {
+          attrs = {}
+        }
+        for (const [, val] of Object.entries(attrs)) {
+          if (!val) continue
+          const valUpper = String(val).trim().toUpperCase()
+          if (valUpper === sel) return true
+          if (sel === 'TSHIRTS' && /\b(TEE|TEES|T-SHIRT|TSHIRT|TSHIRTS|POLO)\b/i.test(valUpper)) return true
+          if (sel === 'SHIRTS' && /(?<!\b(T|TEE)\s*-?\s*)\b(SHIRT|SHIRTS|OVERSHIRT|FLANNEL)\b/i.test(valUpper)) return true
+          if (sel === 'JEANS' && /JEAN|JEANS|DENIM|BOTTOM|PANT|TROUSER|CARGO|JOGGER/i.test(valUpper)) return true
+          if (sel === 'HOODIES' && /HOODIE|SWEATSHIRT|PULLOVER/i.test(valUpper)) return true
+          if ((sel === 'OVERSIZED' || sel === 'OVERSIZZED') && /OVERSIZE|OVERSIZED|OVERSIZZED|BAGGY|RELAXED/i.test(valUpper)) return true
+        }
+      }
+    }
+  }
+
+  // 3. Keyword / Semantic matching on Title & Description
+  const text = `${product?.title || ''} ${product?.description || ''}`.toLowerCase()
+
+  switch (sel) {
+    case 'TSHIRTS':
+      return /\b(tee|tees|t-shirt|t-shirts|tshirt|tshirts|polo|polos|tank|tanks|crewneck)\b/i.test(text)
+
+    case 'SHIRTS':
+      return (
+        /\b(overshirt|overshirts|flannel|flannels|oxford|oxfords|button-down|button down|cuban collar|mandarin collar|popover|resort collar)\b/i.test(text) ||
+        /(?<!\b(t|tee)\s*-?\s*)\b(shirt|shirts)\b/i.test(text)
+      )
+
+    case 'JEANS':
+      return /\b(jean|jeans|denim|denims|pant|pants|trouser|trousers|cargo|cargos|jogger|joggers|bottom|bottoms|chino|chinos|sweatpant|sweatpants|trackpant|trackpants)\b/i.test(text)
+
+    case 'HOODIES':
+      return /\b(hoodie|hoodies|hooded|sweatshirt|sweatshirts|pullover|pullovers|zip-up|fleece|sweater|sweaters)\b/i.test(text)
+
+    case 'OVERSIZED':
+    case 'OVERSIZZED':
+      return /\b(oversize|oversized|oversizze|oversizzed|baggy|relaxed|drop shoulder|loose fit|boxy|box fit)\b/i.test(text)
+
+    case 'OTHER': {
+      if (['OTHER', 'STREETWEAR', 'LUXURY', 'ACCESSORIES', 'FOOTWEAR', 'CAP', 'CAPS', 'JACKET', 'JACKETS'].includes(prodCategory)) {
+        return true
+      }
+      const isSpecific =
+        /\b(tee|tees|t-shirt|t-shirts|tshirt|tshirts|polo)\b/i.test(text) ||
+        /(?<!\b(t|tee)\s*-?\s*)\b(shirt|shirts|overshirt|flannel)\b/i.test(text) ||
+        /\b(jean|jeans|denim|pant|pants|trouser|cargo|jogger)\b/i.test(text) ||
+        /\b(hoodie|hoodies|sweatshirt|pullover)\b/i.test(text) ||
+        /\b(oversize|oversized|oversizzed|baggy)\b/i.test(text)
+      return !isSpecific
+    }
+
+    default:
+      return text.includes(sel.toLowerCase())
+  }
+}
 
 const Home = () => {
   const products = useSelector((state) => state.product.products) || []
@@ -24,9 +111,17 @@ const Home = () => {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [selectedCategory, setSelectedCategory] = useState('ALL')
   const [sortBy, setSortBy] = useState('newest')
+
+  // Calculate product counts per category
+  const categoryCounts = useMemo(() => {
+    const counts = {}
+    CATEGORIES.forEach((cat) => {
+      counts[cat] = products.filter((p) => matchesCategory(p, cat)).length
+    })
+    return counts
+  }, [products])
 
   // Become a seller modal state
   const [showBecomeSellerModal, setShowBecomeSellerModal] = useState(false)
@@ -89,30 +184,13 @@ const Home = () => {
     }
   }, [])
 
-
-
   // Filter & Sort
   const filteredProducts = useMemo(() => {
     let list = [...products]
 
-    // Category filter
-    if (selectedCategory !== 'All') {
-      const cat = selectedCategory.toLowerCase()
-      list = list.filter(
-        (p) =>
-          p.title?.toLowerCase().includes(cat) ||
-          p.description?.toLowerCase().includes(cat)
-      )
-    }
-
-    // Search query filter
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim()
-      list = list.filter(
-        (p) =>
-          p.title?.toLowerCase().includes(q) ||
-          p.description?.toLowerCase().includes(q)
-      )
+    // Category filter using smart matching
+    if (selectedCategory && selectedCategory.toUpperCase() !== 'ALL') {
+      list = list.filter((p) => matchesCategory(p, selectedCategory))
     }
 
     // Sorting
@@ -127,7 +205,7 @@ const Home = () => {
     }
 
     return list
-  }, [products, selectedCategory, searchQuery, sortBy])
+  }, [products, selectedCategory, sortBy])
 
   const formatPrice = (priceObj) => {
     if (!priceObj) return '—'
@@ -141,6 +219,13 @@ const Home = () => {
     const item = product.images[index]
     if (typeof item === 'string') return item
     return item?.url || null
+  }
+
+  const getProductStock = (product) => {
+    if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      return product.variants.reduce((acc, v) => acc + Math.max(0, Number(v.stock) || 0), 0)
+    }
+    return Math.max(0, Number(product?.stock) || 0)
   }
 
   const scrollToCatalog = () => {
@@ -173,33 +258,6 @@ const Home = () => {
             </span>
           </Link>
 
-          {/* Search bar (Desktop) */}
-          <div className="hidden md:flex flex-1 max-w-md mx-8 relative">
-            <svg
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search garments, drops, fits..."
-              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-sm pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-yellow-400 transition-colors"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs"
-              >
-                ✕
-              </button>
-            )}
-          </div>
 
           {/* Right Navigation / User Actions */}
           <div className="flex items-center gap-4 sm:gap-6">
@@ -272,18 +330,31 @@ const Home = () => {
                           </button>
                         )}
 
-                        {/* If user is seller: Seller Studio link */}
+                        {/* If user is seller: Seller Studio & Create Drop links */}
                         {user.role === 'seller' && (
-                          <Link
-                            to="/seller/dashboard"
-                            onClick={() => setIsUserDropdownOpen(false)}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 rounded-sm transition-colors text-left font-medium"
-                          >
-                            <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-                            </svg>
-                            <span>Seller Studio</span>
-                          </Link>
+                          <>
+                            <Link
+                              to="/seller/dashboard"
+                              onClick={() => setIsUserDropdownOpen(false)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 rounded-sm transition-colors text-left font-medium"
+                            >
+                              <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                              </svg>
+                              <span>Seller Studio</span>
+                            </Link>
+
+                            <Link
+                              to="/seller/create-product"
+                              onClick={() => setIsUserDropdownOpen(false)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-sm transition-colors text-left font-medium"
+                            >
+                              <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                              </svg>
+                              <span>Create New Drop</span>
+                            </Link>
+                          </>
                         )}
 
                         <div className="h-px bg-zinc-900 my-1" />
@@ -347,27 +418,7 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Mobile Search Bar */}
-        <div className="md:hidden px-6 pb-4">
-          <div className="relative">
-            <svg
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search garments, drops..."
-              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-sm pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-yellow-400 transition-colors"
-            />
-          </div>
-        </div>
+
       </header>
 
       {/* ── HERO EDITORIAL BANNER ── */}
@@ -472,19 +523,34 @@ const Home = () => {
 
         {/* Category Pills Strip */}
         <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-2 rounded-sm text-xs tracking-widest uppercase transition-all whitespace-nowrap cursor-pointer ${
-                selectedCategory === cat
-                  ? 'bg-yellow-400 text-zinc-950 font-black shadow-sm'
-                  : 'border border-zinc-800/80 bg-zinc-950/40 text-zinc-400 hover:text-white hover:border-zinc-700 font-medium'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+          {CATEGORIES.map((cat) => {
+            const count = categoryCounts[cat] ?? 0
+            const isSelected = selectedCategory === cat
+
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-2 rounded-sm text-xs tracking-widest uppercase transition-all whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+                  isSelected
+                    ? 'bg-yellow-400 text-zinc-950 font-black shadow-md shadow-yellow-400/10 scale-[1.02]'
+                    : 'border border-zinc-800/80 bg-zinc-950/40 text-zinc-400 hover:text-white hover:border-zinc-700 font-medium'
+                }`}
+              >
+                <span>{cat}</span>
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full leading-none ${
+                    isSelected
+                      ? 'bg-zinc-950/20 text-zinc-950 font-black'
+                      : 'bg-zinc-900 text-zinc-500 font-semibold'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {/* State 1: Loading Skeleton */}
@@ -535,16 +601,26 @@ const Home = () => {
         {/* State 4: No Search / Filter Match */}
         {!loading && !error && products.length > 0 && filteredProducts.length === 0 && (
           <div className="border border-zinc-900 rounded-sm p-12 text-center my-8 bg-zinc-950/20 max-w-md mx-auto">
-            <p className="text-zinc-400 text-sm mb-2">No matching garments found</p>
-            <p className="text-zinc-600 text-xs mb-4">Try clearing filters or changing search keywords.</p>
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full border border-zinc-800 flex items-center justify-center text-yellow-400">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+            </div>
+            <p className="text-white font-bold text-sm mb-1.5 uppercase tracking-wider">
+              {selectedCategory !== 'ALL' ? `No ${selectedCategory} Available` : 'No matching garments found'}
+            </p>
+            <p className="text-zinc-500 text-xs mb-5">
+              {selectedCategory !== 'ALL'
+                ? `Currently there are no products listed under ${selectedCategory}.`
+                : 'Our shelves are currently being updated.'}
+            </p>
             <button
-              onClick={() => {
-                setSearchQuery('')
-                setSelectedCategory('All')
-              }}
-              className="text-yellow-400 text-xs tracking-wider uppercase underline hover:text-yellow-300 cursor-pointer"
+              type="button"
+              onClick={() => setSelectedCategory('ALL')}
+              className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-bold px-5 py-2.5 text-xs uppercase tracking-wider rounded-sm transition-all cursor-pointer shadow-sm"
             >
-              Reset Filters
+              <span>View All Garments</span>
+              <span>→</span>
             </button>
           </div>
         )}
@@ -555,6 +631,8 @@ const Home = () => {
             {filteredProducts.map((product) => {
               const primaryImg = getProductImage(product, 0)
               const imageCount = product.images?.length || 0
+              const totalStock = getProductStock(product)
+              const isSoldOut = totalStock <= 0
 
               return (
                 <div
@@ -564,11 +642,21 @@ const Home = () => {
                 >
                   {/* Image Frame (Fashion standard 3:4 aspect ratio) */}
                   <div className="relative aspect-[3/4] bg-zinc-900/60 overflow-hidden">
+                    {/* Sold Out Badge */}
+                    {isSoldOut && (
+                      <div className="absolute top-2.5 left-2.5 bg-red-600/90 backdrop-blur-sm border border-red-500/50 px-2.5 py-0.5 rounded-sm text-[9px] tracking-widest text-white font-black uppercase flex items-center gap-1.5 z-10 shadow-lg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                        <span>Sold Out</span>
+                      </div>
+                    )}
+
                     {primaryImg ? (
                       <img
                         src={primaryImg}
                         alt={product.title}
-                        className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
+                        className={`w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105 ${
+                          isSoldOut ? 'opacity-70 grayscale-[25%]' : ''
+                        }`}
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700">
@@ -586,12 +674,14 @@ const Home = () => {
                       </div>
                     )}
 
-
-
                     {/* View Product Button on Hover */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
-                      <span className="bg-white text-zinc-950 font-black text-[10px] tracking-[0.2em] uppercase px-4 py-2 rounded-sm transform translate-y-2 group-hover:translate-y-0 transition-transform shadow-lg">
-                        View Product
+                      <span className={`font-black text-[10px] tracking-[0.2em] uppercase px-4 py-2 rounded-sm transform translate-y-2 group-hover:translate-y-0 transition-transform shadow-lg ${
+                        isSoldOut
+                          ? 'bg-zinc-950 border border-red-500/60 text-red-400'
+                          : 'bg-white text-zinc-950'
+                      }`}>
+                        {isSoldOut ? 'Sold Out — View Item' : 'View Product'}
                       </span>
                     </div>
                   </div>
@@ -611,9 +701,16 @@ const Home = () => {
                       <span className="text-yellow-400 font-bold text-sm">
                         {formatPrice(product.price)}
                       </span>
-                      <span className="text-zinc-500 text-[10px] tracking-widest uppercase group-hover:text-zinc-300 transition-colors">
-                        View Item →
-                      </span>
+                      {isSoldOut ? (
+                        <span className="text-red-400 font-bold text-[10px] tracking-widest uppercase flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                          <span>Sold Out</span>
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500 text-[10px] tracking-widest uppercase group-hover:text-zinc-300 transition-colors">
+                          View Item →
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

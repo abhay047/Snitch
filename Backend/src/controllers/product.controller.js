@@ -2,7 +2,7 @@ import productModel from "../models/product.model.js"
 import { uploadFile } from "../services/storage.service.js"
 
 export async function createProduct(req, res) {
-    const { title, description, priceAmount, priceCurrency } = req.body
+    const { title, description, priceAmount, priceCurrency, category, color, stock } = req.body
     const seller = req.user
 
     const images = await Promise.all(req.files.map(async (file) => {
@@ -12,14 +12,31 @@ export async function createProduct(req, res) {
         })
     }))
 
+    const initialVariants = []
+    if (color && typeof color === "string" && color.trim()) {
+        const trimmedColor = color.trim()
+        initialVariants.push({
+            images: images,
+            stock: Math.max(0, Number(stock) >= 0 ? Number(stock) : 25),
+            attributes: { color: trimmedColor },
+            price: {
+                amount: priceAmount,
+                currency: priceCurrency || "INR"
+            }
+        })
+    }
+
     const product = await productModel.create({
         title,
         description,
+        category: category || "TSHIRTS",
+        color: color ? color.trim() : "",
         price: {
             amount: priceAmount,
             currency: priceCurrency || "INR"
         },
         images,
+        variants: initialVariants,
         seller: seller._id
     })
 
