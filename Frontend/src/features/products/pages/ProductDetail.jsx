@@ -1138,30 +1138,18 @@ const ProductDetail = () => {
                       <div className="flex flex-wrap gap-2">
                         {availableColors.map((color) => {
                           const isColorActive = (selectedColor || availableColors[0]) === color
-                          const colorVar = product?.variants?.find((v) => {
-                            const c = getVariantAttribute(v, 'color')
-                            return c === color && v.images && v.images.length > 0
-                          })
-                          const colorThumb = colorVar ? getDisplayImageUrl(colorVar.images[0]) : null
 
                           return (
                             <button
                               key={color}
                               type="button"
                               onClick={() => handleSelectColor(color)}
-                              className={`px-3 py-1.5 rounded-sm border text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                              className={`px-3 py-1.5 rounded-sm border text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
                                 isColorActive
                                   ? 'border-white bg-zinc-800 text-white font-bold ring-1 ring-white/40'
                                   : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-white'
                               }`}
                             >
-                              {colorThumb && (
-                                <img
-                                  src={colorThumb}
-                                  alt={color}
-                                  className="w-4 h-4 rounded-full object-cover border border-white/20"
-                                />
-                              )}
                               <span>{color}</span>
                             </button>
                           )
