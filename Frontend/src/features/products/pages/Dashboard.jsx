@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useProduct } from '../hook/useProduct.js'
 import { useSelector } from 'react-redux'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 const CURRENCY_SYMBOLS = {
   INR: '₹',
@@ -15,29 +15,13 @@ const Dashboard = () => {
   const { handleGetSellerProduct } = useProduct()
   const sellerProducts = useSelector((state) => state.product.sellerProducts) || []
   const user = useSelector((state) => state.auth?.user)
+  const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [viewMode, setViewMode] = useState('grid')
-  const [selectedProduct, setSelectedProduct] = useState(null)
-  const [activeModalImageIndex, setActiveModalImageIndex] = useState(0)
-  const thumbnailContainerRef = useRef(null)
-
-  // Automatically smooth-scroll thumbnail into view when image changes
-  useEffect(() => {
-    if (thumbnailContainerRef.current) {
-      const activeThumb = thumbnailContainerRef.current.children[activeModalImageIndex]
-      if (activeThumb) {
-        activeThumb.scrollIntoView({
-          behavior: 'smooth',
-          inline: 'center',
-          block: 'nearest',
-        })
-      }
-    }
-  }, [activeModalImageIndex])
 
   useEffect(() => {
     let isMounted = true
@@ -164,11 +148,22 @@ const Dashboard = () => {
             )}
             <Link
               to="/seller/create-product"
-              className="group bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 shadow-sm"
+              className="group bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-4 sm:px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 shadow-sm"
             >
               <span className="text-sm leading-none font-bold">+</span>
               <span>New Product</span>
             </Link>
+
+            {/* Log Out Button (Non-functional as requested) */}
+            <button
+              type="button"
+              className="border border-zinc-800 hover:border-red-500/40 bg-zinc-900/60 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 font-semibold px-3 sm:px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+              </svg>
+              <span>Log out</span>
+            </button>
           </div>
         </div>
       </header>
@@ -417,8 +412,7 @@ const Dashboard = () => {
                 <div
                   key={product._id}
                   onClick={() => {
-                    setSelectedProduct(product)
-                    setActiveModalImageIndex(0)
+                    navigate(`/seller/product/${product._id}`)
                   }}
                   className="group relative bg-zinc-950/50 border border-zinc-900 hover:border-zinc-700/80 rounded-sm overflow-hidden flex flex-col transition-all duration-300 cursor-pointer hover:-translate-y-1"
                 >
@@ -494,8 +488,7 @@ const Dashboard = () => {
                 <div
                   key={product._id}
                   onClick={() => {
-                    setSelectedProduct(product)
-                    setActiveModalImageIndex(0)
+                    navigate(`/seller/product/${product._id}`)
                   }}
                   className="group bg-zinc-950/40 hover:bg-zinc-950 border border-zinc-900 hover:border-zinc-700/80 rounded-sm p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-200 cursor-pointer"
                 >
@@ -561,193 +554,9 @@ const Dashboard = () => {
         )}
       </main>
 
-      {/* ── PRODUCT DETAIL MODAL ── */}
-      {selectedProduct && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
-          onClick={() => setSelectedProduct(null)}
-        >
-          <div
-            className="bg-[#0a0a0a] border border-zinc-800 rounded-sm max-w-3xl w-full max-h-[90vh] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-6 sm:p-8 relative shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close Button */}
-            <button
-              onClick={() => setSelectedProduct(null)}
-              className="absolute top-5 right-5 text-zinc-500 hover:text-white text-lg w-8 h-8 rounded-sm border border-zinc-800 flex items-center justify-center transition-colors"
-            >
-              ✕
-            </button>
 
-            {/* Modal Content */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Left Column: Image Gallery */}
-              <div>
-                <div className="aspect-[3/4] bg-zinc-900 rounded-sm overflow-hidden border border-zinc-800 relative group">
-                  {getProductImage(selectedProduct, activeModalImageIndex) ? (
-                    <img
-                      src={getProductImage(selectedProduct, activeModalImageIndex)}
-                      alt={selectedProduct.title}
-                      className="w-full h-full object-cover object-top"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-700">
-                      No Image Available
-                    </div>
-                  )}
 
-                  {/* Navigation Arrows on Main Photo */}
-                  {selectedProduct.images?.length > 1 && (
-                    <>
-                      {/* Left Arrow */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveModalImageIndex((prev) =>
-                            prev > 0 ? prev - 1 : selectedProduct.images.length - 1
-                          )
-                        }
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-black border border-white/10 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg backdrop-blur-sm hover:scale-105 active:scale-95"
-                        title="Previous Photo"
-                      >
-                        ‹
-                      </button>
 
-                      {/* Right Arrow */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveModalImageIndex((prev) =>
-                            prev < selectedProduct.images.length - 1 ? prev + 1 : 0
-                          )
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/70 hover:bg-black border border-white/10 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg backdrop-blur-sm hover:scale-105 active:scale-95"
-                        title="Next Photo"
-                      >
-                        ›
-                      </button>
-
-                      {/* Counter Badge */}
-                      <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm border border-white/10 text-zinc-300 text-[10px] tracking-wider px-2 py-0.5 rounded-sm font-medium">
-                        {activeModalImageIndex + 1} / {selectedProduct.images.length}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Side-by-side Thumbnails with Left & Right Nav Buttons */}
-                {selectedProduct.images?.length > 1 && (
-                  <div className="flex items-center gap-2 mt-3">
-                    {/* Left Button */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActiveModalImageIndex((prev) =>
-                          prev > 0 ? prev - 1 : selectedProduct.images.length - 1
-                        )
-                      }
-                      className="w-7 h-14 sm:h-16 rounded-sm border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-yellow-400 flex items-center justify-center transition-colors shrink-0 cursor-pointer text-base font-bold select-none"
-                      title="Previous photo"
-                    >
-                      ‹
-                    </button>
-
-                    {/* Side-by-side Thumbnails Container (Auto-scrolls, No Scrollbar) */}
-                    <div
-                      ref={thumbnailContainerRef}
-                      className="flex-1 flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-0.5 scroll-smooth"
-                    >
-                      {selectedProduct.images.map((img, i) => {
-                        const url = typeof img === 'string' ? img : img?.url
-                        return (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => setActiveModalImageIndex(i)}
-                            className={`w-12 h-14 sm:w-14 sm:h-16 rounded-sm overflow-hidden border shrink-0 transition-all cursor-pointer ${
-                              activeModalImageIndex === i
-                                ? 'border-yellow-400 ring-1 ring-yellow-400 opacity-100 scale-102'
-                                : 'border-zinc-800 opacity-50 hover:opacity-100'
-                            }`}
-                          >
-                            <img src={url} alt={`thumb-${i}`} className="w-full h-full object-cover object-top" />
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    {/* Right Button */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActiveModalImageIndex((prev) =>
-                          prev < selectedProduct.images.length - 1 ? prev + 1 : 0
-                        )
-                      }
-                      className="w-7 h-14 sm:h-16 rounded-sm border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-yellow-400 flex items-center justify-center transition-colors shrink-0 cursor-pointer text-base font-bold select-none"
-                      title="Next photo"
-                    >
-                      ›
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column: Details */}
-              <div className="flex flex-col justify-between space-y-6">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full" />
-                    <span className="text-yellow-400 text-[10px] tracking-[0.3em] uppercase font-medium">
-                      Product Details
-                    </span>
-                  </div>
-
-                  <h2 className="text-white text-2xl font-black tracking-tight leading-tight">
-                    {selectedProduct.title}
-                  </h2>
-
-                  {/* Price */}
-                  <div className="mt-4 pb-4 border-b border-zinc-900">
-                    <span className="text-zinc-500 text-[10px] tracking-[0.2em] uppercase block mb-1">
-                      Price
-                    </span>
-                    <span className="text-yellow-400 text-3xl font-black tracking-tight">
-                      {formatPrice(selectedProduct.price)}
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  <div className="mt-4">
-                    <span className="text-zinc-500 text-[10px] tracking-[0.2em] uppercase block mb-2">
-                      Description
-                    </span>
-                    <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">
-                      {selectedProduct.description}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Meta details */}
-                <div className="pt-4 border-t border-zinc-900 space-y-2 text-xs">
-                  <div className="flex justify-between text-zinc-500">
-                    <span>Product ID</span>
-                    <span className="text-zinc-300 font-mono text-[11px]">{selectedProduct._id}</span>
-                  </div>
-                  <div className="flex justify-between text-zinc-500">
-                    <span>Listed Date</span>
-                    <span className="text-zinc-300">{formatDate(selectedProduct.createdAt)}</span>
-                  </div>
-                  <div className="flex justify-between text-zinc-500">
-                    <span>Images Uploaded</span>
-                    <span className="text-zinc-300">{selectedProduct.images?.length || 0}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
