@@ -3,6 +3,8 @@ import { useSelector, useDispatch } from 'react-redux'
 import { Link, useNavigate } from 'react-router'
 import { useCart } from '../hook/useCart'
 import { useAuth } from '../../auth/hook/useAuth'
+import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
+import ClearBagConfirmModal from '../components/ClearBagConfirmModal.jsx'
 import { setItems } from '../state/cart.slice'
 
 const CURRENCY_SYMBOLS = {
@@ -42,7 +44,33 @@ const Cart = () => {
   const user = useSelector((state) => state.auth?.user)
   const authLoading = useSelector((state) => state.auth?.loading)
   const { handleGetCart, handleUpdateQuantity: updateQuantityInCart, handleRemoveItem: removeItemFromCart, handleClearCart: clearAllInCart } = useCart()
-  const { handleGetMe } = useAuth()
+  const { handleGetMe, handleLogout } = useAuth()
+
+  // Logout Confirmation Modal State
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  // Clear Bag Confirmation Modal State
+  const [isClearBagModalOpen, setIsClearBagModalOpen] = useState(false)
+  const [isClearingBag, setIsClearingBag] = useState(false)
+
+  const handleUserLogout = () => {
+    setIsUserDropdownOpen(false)
+    setIsLogoutModalOpen(true)
+  }
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await handleLogout()
+      setIsLogoutModalOpen(false)
+      navigate('/login')
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(null)
@@ -248,18 +276,24 @@ const Cart = () => {
     }
   }
 
-  // Clear all items from bag with backend persistence
-  const handleClearBag = async () => {
-    if (window.confirm('Are you sure you want to empty your shopping bag?')) {
-      try {
-        setLoading(true)
-        await clearAllInCart()
-        showToast('All garments removed from bag')
-      } catch (err) {
-        showToast(err?.response?.data?.message || 'Failed to empty shopping bag')
-      } finally {
-        setLoading(false)
-      }
+  // Open custom modal to clear entire bag (no browser window.confirm popup)
+  const handleOpenClearBagModal = () => {
+    if (cartItems.length > 0) {
+      setIsClearBagModalOpen(true)
+    }
+  }
+
+  // Confirm clear all items from bag with backend persistence
+  const handleConfirmClearBag = async () => {
+    try {
+      setIsClearingBag(true)
+      await clearAllInCart()
+      setIsClearBagModalOpen(false)
+      showToast('All garments removed from bag')
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to empty shopping bag')
+    } finally {
+      setIsClearingBag(false)
     }
   }
 
@@ -438,6 +472,20 @@ const Cart = () => {
                             <span>Seller Studio</span>
                           </Link>
                         )}
+
+                        <div className="h-px bg-zinc-900 my-1" />
+
+                        {/* Functional Log Out Button */}
+                        <button
+                          type="button"
+                          onClick={handleUserLogout}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-sm transition-colors text-left font-medium cursor-pointer"
+                        >
+                          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                          </svg>
+                          <span>Log out</span>
+                        </button>
                       </div>
                     </div>
                   )}
@@ -493,7 +541,7 @@ const Cart = () => {
           {cartItems.length > 0 && (
             <button
               type="button"
-              onClick={handleClearBag}
+              onClick={handleOpenClearBagModal}
               className="text-[11px] uppercase tracking-wider text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
             >
               Clear Entire Bag
@@ -1193,6 +1241,32 @@ const Cart = () => {
           </div>
         </div>
       </footer>
+
+      {/* ── LOGOUT CONFIRMATION MODAL ── */}
+      <LogoutConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isLoggingOut={isLoggingOut}
+        user={user}
+      />
+
+      {/* ── CLEAR BAG CONFIRMATION MODAL ── */}
+      <ClearBagConfirmModal
+        isOpen={isClearBagModalOpen}
+        onClose={() => !isClearingBag && setIsClearBagModalOpen(false)}
+        onConfirm={handleConfirmClearBag}
+        isClearing={isClearingBag}
+        cartItems={cartItems}
+        getItemImage={getItemImage}
+        getItemVariantDetails={getItemVariantDetails}
+        getItemUnitPrice={getItemUnitPrice}
+        getItemCurrency={getItemCurrency}
+        formatPrice={formatPrice}
+        subtotal={subtotal}
+        totalQuantity={totalQuantity}
+        primaryCurrency={primaryCurrency}
+      />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import productModel from "../models/product.model.js"
 import { uploadFile } from "../services/storage.service.js"
+import cartModel from "../models/cart.model.js"
 
 export async function createProduct(req, res) {
     const { title, description, priceAmount, priceCurrency, category, color, size, stock } = req.body
@@ -298,6 +299,141 @@ export async function deleteProductVariant(req, res) {
     } catch (err) {
         return res.status(500).json({
             message: err.message || "Failed to delete variant",
+            success: false
+        })
+    }
+}
+
+export async function updateProduct(req, res) {
+    try {
+        const { id } = req.params
+        const seller = req.user
+        const { title, description, category, color, priceAmount, priceCurrency, stock, existingImages } = req.body
+
+        const product = await productModel.findById(id)
+        if (!product) {
+            return res.status(404).json({ message: "Product not found", success: false })
+        }
+
+        if (product.seller.toString() !== seller._id.toString()) {
+            return res.status(403).json({ message: "Unauthorized to modify this product", success: false })
+        }
+
+        if (title !== undefined && title.trim()) product.title = title.trim()
+        if (description !== undefined && description.trim()) product.description = description.trim()
+        if (category !== undefined && category.trim()) product.category = category.trim().toUpperCase()
+        if (color !== undefined) product.color = color.trim()
+        if (priceAmount !== undefined && !isNaN(Number(priceAmount))) {
+            product.price = {
+                amount: Number(priceAmount),
+                currency: priceCurrency || product.price?.currency || "INR"
+            }
+        }
+        if (stock !== undefined && !isNaN(Number(stock))) {
+            product.stock = Math.max(0, Number(stock))
+        }
+
+        // Handle Images: preserved existing images + newly uploaded files
+        let finalImages = []
+
+        if (existingImages !== undefined) {
+            let parsedExisting = []
+            try {
+                if (typeof existingImages === "string") {
+                    parsedExisting = JSON.parse(existingImages)
+                } else if (Array.isArray(existingImages)) {
+                    parsedExisting = existingImages
+                }
+            } catch {
+                parsedExisting = Array.isArray(existingImages) ? existingImages : [existingImages]
+            }
+
+            if (Array.isArray(parsedExisting)) {
+                parsedExisting.forEach((img) => {
+                    if (typeof img === "string" && img.trim()) {
+                        finalImages.push({ url: img.trim() })
+                    } else if (img && img.url) {
+                        finalImages.push({ url: img.url })
+                    }
+                })
+            }
+        } else if (!req.files || req.files.length === 0) {
+            // Neither existingImages nor new files sent: keep current images
+            finalImages = product.images || []
+        } else {
+            // New files sent without existingImages list: append to current images
+            finalImages = [...(product.images || [])]
+        }
+
+        // Upload any new image files sent via Multer
+        if (req.files && req.files.length > 0) {
+            const uploaded = await Promise.all(
+                req.files.map(async (file) => {
+                    const result = await uploadFile({
+                        buffer: file.buffer,
+                        fileName: file.originalname
+                    })
+                    return { url: result.url }
+                })
+            )
+            finalImages.push(...uploaded)
+        }
+
+        // If either existing images were specified or new files were uploaded, update product.images
+        if (existingImages !== undefined || (req.files && req.files.length > 0)) {
+            if (finalImages.length === 0) {
+                return res.status(400).json({
+                    message: "At least one product image is required",
+                    success: false
+                })
+            }
+            product.images = finalImages
+        }
+
+        await product.save()
+
+        return res.status(200).json({
+            message: "Drop updated successfully",
+            success: true,
+            product
+        })
+    } catch (err) {
+        return res.status(500).json({
+            message: err.message || "Failed to update product",
+            success: false
+        })
+    }
+}
+
+export async function deleteProduct(req, res) {
+    try {
+        const { id } = req.params
+        const seller = req.user
+
+        const product = await productModel.findById(id)
+        if (!product) {
+            return res.status(404).json({ message: "Product not found", success: false })
+        }
+
+        if (product.seller.toString() !== seller._id.toString()) {
+            return res.status(403).json({ message: "Unauthorized to delete this product", success: false })
+        }
+
+        await productModel.findByIdAndDelete(id)
+
+        // Clean up references in shopping bags
+        await cartModel.updateMany(
+            { "items.product": id },
+            { $pull: { items: { product: id } } }
+        ).catch(() => {})
+
+        return res.status(200).json({
+            message: "Drop deleted successfully",
+            success: true
+        })
+    } catch (err) {
+        return res.status(500).json({
+            message: err.message || "Failed to delete product",
             success: false
         })
     }

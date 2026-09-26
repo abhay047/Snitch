@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useProduct } from '../hook/useProduct.js'
+import { useAuth } from '../../auth/hook/useAuth.js'
+import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
 import { useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router'
 
@@ -13,9 +15,31 @@ const CURRENCY_SYMBOLS = {
 
 const Dashboard = () => {
   const { handleGetSellerProduct } = useProduct()
+  const { handleLogout } = useAuth()
   const sellerProducts = useSelector((state) => state.product.sellerProducts) || []
   const user = useSelector((state) => state.auth?.user)
   const navigate = useNavigate()
+
+  // Logout Confirmation Modal State
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleUserLogout = () => {
+    setIsLogoutModalOpen(true)
+  }
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await handleLogout()
+      setIsLogoutModalOpen(false)
+      navigate('/login')
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -184,11 +208,12 @@ const Dashboard = () => {
               <span className="hidden sm:inline">New Product</span>
             </Link>
 
-            {/* Non-functional Log out button */}
+            {/* Functional Log out button */}
             <button
               type="button"
+              onClick={handleUserLogout}
               className="border border-zinc-800 hover:border-red-500/40 bg-zinc-900/60 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 font-semibold px-3 py-2.5 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 cursor-pointer"
-              title="Log out (Non-functional)"
+              title="Log out"
             >
               <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -613,8 +638,14 @@ const Dashboard = () => {
         )}
       </main>
 
-
-
+      {/* ── LOGOUT CONFIRMATION MODAL ── */}
+      <LogoutConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isLoggingOut={isLoggingOut}
+        user={user}
+      />
 
     </div>
   )

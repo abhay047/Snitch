@@ -51,3 +51,13 @@ export async function addVariantImages(productId, variantId, formData) {
     const response = await productApiInstance.post(`/${productId}/variants/${variantId}/images`, formData)
     return response.data
 }
+
+export async function updateProduct(productId, updateData) {
+    const response = await productApiInstance.patch(`/${productId}`, updateData)
+    return response.data
+}
+
+export async function deleteProduct(productId) {
+    const response = await productApiInstance.delete(`/${productId}`)
+    return response.data
+}

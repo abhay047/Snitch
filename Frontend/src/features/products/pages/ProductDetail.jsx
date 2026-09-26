@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { useProduct } from '../hook/useProduct'
 import { useAuth } from '../../auth/hook/useAuth'
 import { useCart } from '../../cart/hook/useCart'
+import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
 
 const CURRENCY_SYMBOLS = {
   INR: '₹',
@@ -17,7 +18,7 @@ const ProductDetail = () => {
   const { productId } = useParams()
   const navigate = useNavigate()
   const { handleGetProductById } = useProduct()
-  const { handleGetMe, handleBecomeSeller } = useAuth()
+  const { handleGetMe, handleBecomeSeller, handleLogout } = useAuth()
   const { handleAddItem, handleGetCart } = useCart()
 
   const user = useSelector((state) => state.auth?.user)
@@ -26,6 +27,28 @@ const ProductDetail = () => {
   const cartItemCount = useMemo(() => {
     return cartItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)
   }, [cartItems])
+
+  // Logout Confirmation Modal State
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleUserLogout = () => {
+    setIsUserDropdownOpen(false)
+    setIsLogoutModalOpen(true)
+  }
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await handleLogout()
+      setIsLogoutModalOpen(false)
+      navigate('/login')
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -811,9 +834,10 @@ const ProductDetail = () => {
 
                         <div className="h-px bg-zinc-900 my-1" />
 
-                        {/* Pure Log Out Button (without functionality as per specification) */}
+                        {/* Functional Log Out Button */}
                         <button
                           type="button"
+                          onClick={handleUserLogout}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-sm transition-colors text-left font-medium cursor-pointer"
                         >
                           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
@@ -1760,6 +1784,15 @@ const ProductDetail = () => {
           <span className="text-xs font-bold tracking-wide">{bagToast}</span>
         </div>
       )}
+
+      {/* ── LOGOUT CONFIRMATION MODAL ── */}
+      <LogoutConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isLoggingOut={isLoggingOut}
+        user={user}
+      />
     </div>
   )
 }

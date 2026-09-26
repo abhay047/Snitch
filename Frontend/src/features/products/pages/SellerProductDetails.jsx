@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router'
 import { useSelector } from 'react-redux'
 import { useProduct } from '../hook/useProduct.js'
 import { useAuth } from '../../auth/hook/useAuth.js'
+import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
 
 const CURRENCY_SYMBOLS = {
   INR: '₹',
@@ -50,20 +51,73 @@ const SellerProductDetails = () => {
   const navigate = useNavigate()
   const {
     handleGetProductById,
+    handleUpdateProduct,
+    handleDeleteProduct,
     handleCreateVariant,
     handleUpdateVariantStock,
     handleDeleteVariant,
     handleAddVariantImages,
   } = useProduct()
-  const { handleGetMe } = useAuth()
+  const { handleGetMe, handleLogout } = useAuth()
 
   const user = useSelector((state) => state.auth?.user)
+
+  // Logout Confirmation Modal State
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleUserLogout = () => {
+    setIsLogoutModalOpen(true)
+  }
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await handleLogout()
+      setIsLogoutModalOpen(false)
+      navigate('/login')
+    } catch (err) {
+      console.error('Logout error:', err)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [copyToast, setCopyToast] = useState(null)
+
+  // ── EDIT PRODUCT INFO & IMAGES MODAL STATE ──
+  const [isEditInfoModalOpen, setIsEditInfoModalOpen] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    description: '',
+    category: 'TSHIRTS',
+    color: '',
+    priceAmount: '',
+    priceCurrency: 'INR',
+  })
+  const [isUpdatingProduct, setIsUpdatingProduct] = useState(false)
+  const [editError, setEditError] = useState(null)
+  const [editExistingImages, setEditExistingImages] = useState([])
+  const [editNewFiles, setEditNewFiles] = useState([])
+  const [editNewPreviews, setEditNewPreviews] = useState([])
+  const editFileInputRef = useRef(null)
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      editNewPreviews.forEach((p) => {
+        if (p?.url) URL.revokeObjectURL(p.url)
+      })
+    }
+  }, [editNewPreviews])
+
+  // ── DELETE DROP CONFIRMATION MODAL STATE ──
+  const [isDeleteDropModalOpen, setIsDeleteDropModalOpen] = useState(false)
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false)
 
   // ── VARIANT & STOCK MANAGEMENT STATE ──
   const [isCreatingVariant, setIsCreatingVariant] = useState(false)
@@ -229,6 +283,160 @@ const SellerProductDetails = () => {
   const showToast = (msg) => {
     setCopyToast(msg)
     setTimeout(() => setCopyToast(null), 3500)
+  }
+
+  // ── EDIT DROP INFO & DELETE DROP HANDLERS ──
+
+  const handleOpenEditModal = () => {
+    if (!product) return
+    setEditFormData({
+      title: product.title || '',
+      description: product.description || '',
+      category: product.category || 'TSHIRTS',
+      color: product.color || '',
+      priceAmount: product.price?.amount != null ? product.price.amount : '',
+      priceCurrency: product.price?.currency || 'INR',
+    })
+
+    // Extract current existing image URLs
+    const existing = (product.images || [])
+      .map((img) => (typeof img === 'string' ? img : img?.url))
+      .filter(Boolean)
+    setEditExistingImages(existing)
+
+    // Revoke previous previews if any
+    editNewPreviews.forEach((p) => {
+      if (p?.url) URL.revokeObjectURL(p.url)
+    })
+    setEditNewFiles([])
+    setEditNewPreviews([])
+    setEditError(null)
+    setIsEditInfoModalOpen(true)
+  }
+
+  const handleCloseEditModal = () => {
+    if (isUpdatingProduct) return
+    editNewPreviews.forEach((p) => {
+      if (p?.url) URL.revokeObjectURL(p.url)
+    })
+    setEditNewFiles([])
+    setEditNewPreviews([])
+    setEditError(null)
+    setIsEditInfoModalOpen(false)
+  }
+
+  const handleRemoveExistingImage = (idxToRemove) => {
+    setEditExistingImages((prev) => prev.filter((_, i) => i !== idxToRemove))
+  }
+
+  const handleAddNewImages = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    const currentTotal = editExistingImages.length + editNewFiles.length
+    const maxAllowed = 7 - currentTotal
+
+    if (maxAllowed <= 0) {
+      setEditError('Maximum limit of 7 drop images reached.')
+      e.target.value = ''
+      return
+    }
+
+    const filesToAdd = files.slice(0, maxAllowed)
+    if (files.length > maxAllowed) {
+      showToast(`Only ${maxAllowed} more photo(s) could be added (max 7 total).`)
+    }
+
+    setEditNewFiles((prev) => [...prev, ...filesToAdd])
+    const newPreviews = filesToAdd.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+    }))
+    setEditNewPreviews((prev) => [...prev, ...newPreviews])
+    e.target.value = ''
+  }
+
+  const handleRemoveNewFile = (idxToRemove) => {
+    setEditNewFiles((prev) => prev.filter((_, i) => i !== idxToRemove))
+    setEditNewPreviews((prev) => {
+      const removed = prev[idxToRemove]
+      if (removed?.url) URL.revokeObjectURL(removed.url)
+      return prev.filter((_, i) => i !== idxToRemove)
+    })
+  }
+
+  const handleSaveEditProduct = async (e) => {
+    e.preventDefault()
+    if (!editFormData.title.trim()) {
+      setEditError('Drop title is required')
+      return
+    }
+    if (isNaN(Number(editFormData.priceAmount)) || Number(editFormData.priceAmount) < 0) {
+      setEditError('Please enter a valid price amount')
+      return
+    }
+
+    const totalImages = editExistingImages.length + editNewFiles.length
+    if (totalImages === 0) {
+      setEditError('Drop must contain at least 1 image. Please keep an existing image or upload a new photo.')
+      return
+    }
+
+    try {
+      setIsUpdatingProduct(true)
+      setEditError(null)
+
+      const formData = new FormData()
+      formData.append('title', editFormData.title.trim())
+      formData.append('description', editFormData.description.trim())
+      formData.append('category', editFormData.category)
+      formData.append('color', editFormData.color.trim())
+      formData.append('priceAmount', Number(editFormData.priceAmount))
+      formData.append('priceCurrency', editFormData.priceCurrency)
+
+      // Send retained existing image URLs as a JSON string
+      formData.append('existingImages', JSON.stringify(editExistingImages))
+
+      // Append newly chosen image files under "images"
+      editNewFiles.forEach((file) => {
+        formData.append('images', file)
+      })
+
+      const updated = await handleUpdateProduct(productId, formData)
+      if (updated) {
+        setProduct((prev) => ({
+          ...prev,
+          ...updated,
+        }))
+        setActiveImageIndex(0)
+      }
+
+      // Cleanup preview URLs
+      editNewPreviews.forEach((p) => {
+        if (p?.url) URL.revokeObjectURL(p.url)
+      })
+      setEditNewFiles([])
+      setEditNewPreviews([])
+
+      setIsEditInfoModalOpen(false)
+      showToast('Drop information and imagery updated successfully!')
+    } catch (err) {
+      setEditError(err?.response?.data?.message || 'Failed to update drop info')
+    } finally {
+      setIsUpdatingProduct(false)
+    }
+  }
+
+  const handleConfirmDeleteDrop = async () => {
+    try {
+      setIsDeletingProduct(true)
+      await handleDeleteProduct(productId)
+      setIsDeleteDropModalOpen(false)
+      navigate('/seller/dashboard')
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to delete drop')
+      setIsDeletingProduct(false)
+    }
   }
 
   // ── VARIANT & STOCK HANDLERS ──
@@ -652,11 +860,12 @@ const SellerProductDetails = () => {
               <span className="hidden sm:inline">New Product</span>
             </Link>
 
-            {/* Non-functional Log out button */}
+            {/* Functional Log out button */}
             <button
               type="button"
+              onClick={handleUserLogout}
               className="border border-zinc-800 hover:border-red-500/40 bg-zinc-900/60 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 font-semibold px-3 py-2.5 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 cursor-pointer"
-              title="Log out (Non-functional)"
+              title="Log out"
             >
               <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
@@ -1069,9 +1278,10 @@ const SellerProductDetails = () => {
                         <span>Share Link</span>
                       </button>
 
-                      {/* Non-functional Edit Info Button */}
+                      {/* Functional Edit Info Button */}
                       <button
                         type="button"
+                        onClick={handleOpenEditModal}
                         className="w-full border border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 hover:bg-zinc-900 text-zinc-300 hover:text-white font-bold py-3.5 px-4 text-xs uppercase tracking-[0.15em] rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
@@ -1081,10 +1291,11 @@ const SellerProductDetails = () => {
                       </button>
                     </div>
 
-                    {/* Non-functional Delete Drop Button */}
+                    {/* Functional Delete Drop Button */}
                     <div className="pt-2">
                       <button
                         type="button"
+                        onClick={() => setIsDeleteDropModalOpen(true)}
                         className="w-full border border-red-500/20 hover:border-red-500/40 bg-red-500/5 hover:bg-red-500/10 text-red-400/80 hover:text-red-400 font-semibold py-2.5 px-4 text-[11px] uppercase tracking-[0.15em] rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
@@ -2133,6 +2344,442 @@ const SellerProductDetails = () => {
           </div>
         </div>
       )}
+
+      {/* ── EDIT DROP INFO & IMAGES MODAL ── */}
+      {isEditInfoModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+          onClick={() => !isUpdatingProduct && handleCloseEditModal()}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-zinc-800 rounded-sm max-w-2xl w-full p-6 sm:p-8 relative shadow-2xl my-8 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top gold accent line */}
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-600" />
+
+            {/* Close Button */}
+            {!isUpdatingProduct && (
+              <button
+                type="button"
+                onClick={handleCloseEditModal}
+                className="absolute top-5 right-5 text-zinc-500 hover:text-white text-lg w-8 h-8 rounded-sm border border-zinc-800 flex items-center justify-center transition-colors cursor-pointer z-10"
+                title="Cancel"
+              >
+                ✕
+              </button>
+            )}
+
+            {/* Header Icon + Title */}
+            <div className="flex items-center gap-3.5 mb-5 shrink-0">
+              <div className="w-11 h-11 rounded-sm bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center text-yellow-400 shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                </svg>
+              </div>
+              <div>
+                <div className="inline-flex items-center gap-2 mb-0.5">
+                  <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                  <span className="text-yellow-400 text-[10px] tracking-[0.25em] uppercase font-bold">
+                    Seller Studio
+                  </span>
+                </div>
+                <h3 className="text-white text-xl font-black tracking-tight uppercase">
+                  Edit Drop Information & Images
+                </h3>
+              </div>
+            </div>
+
+            {editError && (
+              <div className="mb-4 p-3 bg-red-950/40 border border-red-500/40 text-red-400 text-xs rounded-sm shrink-0">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditProduct} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {/* Drop Title */}
+              <div>
+                <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                  Drop Title / Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="e.g. Heavyweight Boxy Flannel Shirt"
+                  className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors uppercase font-medium"
+                />
+              </div>
+
+              {/* Category & Base Color */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                    Category
+                  </label>
+                  <select
+                    value={editFormData.category}
+                    onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                    className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition-colors uppercase font-bold cursor-pointer"
+                  >
+                    <option value="TSHIRTS">TSHIRTS</option>
+                    <option value="SHIRTS">SHIRTS</option>
+                    <option value="JEANS">JEANS</option>
+                    <option value="HOODIES">HOODIES</option>
+                    <option value="OVERSIZED">OVERSIZED</option>
+                    <option value="OTHER">OTHER</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                    Garment Base Color
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.color}
+                    onChange={(e) => setEditFormData({ ...editFormData, color: e.target.value })}
+                    placeholder="e.g. Onyx Black"
+                    className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors capitalize font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Price & Currency */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                    Base Drop Price *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-xs">
+                      {CURRENCY_SYMBOLS[editFormData.priceCurrency] || '₹'}
+                    </span>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      value={editFormData.priceAmount}
+                      onChange={(e) => setEditFormData({ ...editFormData, priceAmount: e.target.value })}
+                      placeholder="e.g. 2499"
+                      className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm pl-8 pr-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors font-mono font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                    Currency
+                  </label>
+                  <select
+                    value={editFormData.priceCurrency}
+                    onChange={(e) => setEditFormData({ ...editFormData, priceCurrency: e.target.value })}
+                    className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 transition-colors uppercase font-mono font-bold cursor-pointer"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                  Drop Story & Description
+                </label>
+                <textarea
+                  rows="3"
+                  value={editFormData.description}
+                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                  placeholder="Describe garment composition, silhouette, GSM fabric quality, wash care instructions..."
+                  className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors leading-relaxed"
+                />
+              </div>
+
+              {/* ── DROP EDITORIAL IMAGERY (ADD / REMOVE / EDIT) ── */}
+              <div className="border-t border-zinc-800/80 pt-4">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div>
+                    <label className="block text-zinc-300 text-[11px] uppercase font-bold tracking-wider">
+                      Drop Editorial Imagery
+                    </label>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      Retain current photos, remove obsolete shots, or upload new high-res assets (Max 7 photos).
+                    </p>
+                  </div>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold tracking-wider ${
+                    editExistingImages.length + editNewFiles.length >= 7
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                      : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                  }`}>
+                    {editExistingImages.length + editNewFiles.length} / 7 IMAGES
+                  </span>
+                </div>
+
+                {/* Images Grid */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-3">
+                  {/* Current Saved Images */}
+                  {editExistingImages.map((imgUrl, idx) => (
+                    <div
+                      key={`existing-${idx}`}
+                      className="group relative aspect-[3/4] rounded-sm bg-zinc-900 border border-zinc-800 hover:border-zinc-600 overflow-hidden transition-all shadow-sm"
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`Drop asset ${idx + 1}`}
+                        className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                      />
+                      <span className="absolute top-1.5 left-1.5 bg-black/80 backdrop-blur-xs text-zinc-400 border border-zinc-700/80 text-[8px] font-bold px-1.5 py-0.5 rounded-xs tracking-wider uppercase pointer-events-none">
+                        Current
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExistingImage(idx)}
+                        disabled={isUpdatingProduct}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-sm bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-all opacity-80 group-hover:opacity-100 cursor-pointer shadow-md"
+                        title="Delete photo"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Newly Staged Uploads */}
+                  {editNewPreviews.map((preview, idx) => (
+                    <div
+                      key={`new-${idx}`}
+                      className="group relative aspect-[3/4] rounded-sm bg-zinc-900 border-2 border-yellow-400/70 hover:border-yellow-400 overflow-hidden transition-all shadow-sm shadow-yellow-400/10"
+                    >
+                      <img
+                        src={preview.url}
+                        alt={`New upload ${idx + 1}`}
+                        className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                      />
+                      <span className="absolute top-1.5 left-1.5 bg-yellow-400 text-zinc-950 font-black text-[8px] px-1.5 py-0.5 rounded-xs tracking-wider uppercase pointer-events-none shadow-xs">
+                        New
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveNewFile(idx)}
+                        disabled={isUpdatingProduct}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-sm bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-all opacity-90 group-hover:opacity-100 cursor-pointer shadow-md"
+                        title="Discard photo"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add Photos Card */}
+                  {editExistingImages.length + editNewFiles.length < 7 && (
+                    <label
+                      htmlFor="editProductFileInput"
+                      className="aspect-[3/4] rounded-sm border-2 border-dashed border-zinc-800 hover:border-yellow-400/80 bg-zinc-900/40 hover:bg-yellow-400/5 transition-all flex flex-col items-center justify-center p-3 text-center cursor-pointer group select-none"
+                    >
+                      <input
+                        type="file"
+                        id="editProductFileInput"
+                        ref={editFileInputRef}
+                        multiple
+                        accept="image/*"
+                        onChange={handleAddNewImages}
+                        disabled={isUpdatingProduct}
+                        className="hidden"
+                      />
+                      <div className="w-8 h-8 rounded-full bg-zinc-800 group-hover:bg-yellow-400/20 group-hover:text-yellow-400 text-zinc-400 flex items-center justify-center transition-colors mb-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                      </div>
+                      <span className="text-[11px] font-bold text-zinc-300 group-hover:text-yellow-400 uppercase tracking-wider transition-colors">
+                        Add Photos
+                      </span>
+                      <span className="text-[9px] text-zinc-500 mt-0.5">
+                        PNG, JPG, WEBP
+                      </span>
+                    </label>
+                  )}
+                </div>
+
+                {editExistingImages.length + editNewFiles.length >= 7 && (
+                  <p className="text-[10px] text-amber-400/90 font-medium mt-2.5 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                    </svg>
+                    <span>Maximum limit of 7 images reached. Remove an image to upload another.</span>
+                  </p>
+                )}
+
+                {editExistingImages.length + editNewFiles.length === 0 && (
+                  <p className="text-[10px] text-red-400 font-medium mt-2.5 flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                    </svg>
+                    <span>Drop must contain at least 1 image. Please add or retain a photo.</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-3 border-t border-zinc-900 shrink-0">
+                <button
+                  type="button"
+                  disabled={isUpdatingProduct}
+                  onClick={handleCloseEditModal}
+                  className="flex-1 border border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 text-zinc-400 hover:text-white py-3 text-xs tracking-wider uppercase rounded-sm transition-all cursor-pointer font-bold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isUpdatingProduct || editExistingImages.length + editNewFiles.length === 0}
+                  className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black py-3 text-xs tracking-[0.15em] uppercase rounded-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-yellow-400/10 disabled:opacity-50"
+                >
+                  {isUpdatingProduct ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Saving & Uploading...</span>
+                    </>
+                  ) : (
+                    <span>Save Changes</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE ENTIRE DROP CONFIRMATION MODAL ── */}
+      {isDeleteDropModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
+          onClick={() => !isDeletingProduct && setIsDeleteDropModalOpen(false)}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-red-500/40 rounded-sm max-w-md w-full p-6 sm:p-8 relative shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top red accent glow line */}
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-600 via-rose-500 to-amber-500" />
+
+            {/* Close Button */}
+            {!isDeletingProduct && (
+              <button
+                type="button"
+                onClick={() => setIsDeleteDropModalOpen(false)}
+                className="absolute top-5 right-5 text-zinc-500 hover:text-white text-lg w-8 h-8 rounded-sm border border-zinc-800 flex items-center justify-center transition-colors cursor-pointer"
+                title="Cancel"
+              >
+                ✕
+              </button>
+            )}
+
+            {/* Header Icon + Title */}
+            <div className="flex items-center gap-3.5 mb-5">
+              <div className="w-12 h-12 rounded-sm bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+              </div>
+              <div>
+                <div className="inline-flex items-center gap-2 mb-0.5">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-red-400 text-[10px] tracking-[0.25em] uppercase font-bold">
+                    Permanent Deletion
+                  </span>
+                </div>
+                <h3 className="text-white text-xl font-black tracking-tight uppercase">
+                  Delete Entire Drop?
+                </h3>
+              </div>
+            </div>
+
+            <p className="text-zinc-400 text-xs leading-relaxed mb-5">
+              Are you sure you want to permanently delete this garment drop? This action cannot be reversed. The drop, all its variants, images, and inventory records will be erased completely.
+            </p>
+
+            {/* Product Summary Card */}
+            <div className="bg-zinc-950/80 border border-zinc-900 rounded-sm p-4 mb-6 flex items-center gap-3.5">
+              <div className="w-14 h-18 rounded-sm bg-zinc-900 overflow-hidden border border-zinc-800 shrink-0">
+                {product?.images?.[0] ? (
+                  <img
+                    src={typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url}
+                    alt={product.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-600">
+                    No Img
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-zinc-500 text-[9px] uppercase tracking-widest font-bold block mb-0.5">
+                  {product?.category || 'Collection Drop'}
+                </span>
+                <h4 className="text-white font-bold text-xs uppercase truncate">
+                  {product?.title}
+                </h4>
+                <div className="flex items-center gap-2 mt-1.5 text-[11px] font-mono">
+                  <span className="text-yellow-400 font-bold">
+                    {formatPrice(product?.price)}
+                  </span>
+                  <span className="text-zinc-600">•</span>
+                  <span className="text-zinc-400">
+                    {product?.variants?.length || 0} variants
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={() => setIsDeleteDropModalOpen(false)}
+                className="flex-1 border border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 text-zinc-400 hover:text-white py-3 text-xs tracking-wider uppercase rounded-sm transition-all cursor-pointer font-bold disabled:opacity-50"
+              >
+                Keep Drop
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={handleConfirmDeleteDrop}
+                className="flex-1 bg-red-600 hover:bg-red-500 active:scale-[0.98] text-white font-black py-3 text-xs tracking-[0.15em] uppercase rounded-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-red-950/50 disabled:opacity-50"
+              >
+                {isDeletingProduct ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Confirm Delete</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── LOGOUT CONFIRMATION MODAL ── */}
+      <LogoutConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isLoggingOut={isLoggingOut}
+        user={user}
+      />
     </div>
   )
 }

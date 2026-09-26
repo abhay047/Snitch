@@ -1,27 +1,52 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../hook/useAuth.js";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link, useSearchParams } from "react-router";
 import ContinueWithGooglel from "../components/ContinueWithGooglel.jsx";
 
 const Login = () => {
-  const { handleLogin } = useAuth();
+  const { handleLogin, handleLogout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err === "blacklisted") {
+      setErrorMsg("Your session token is blacklisted. Access denied.");
+    } else if (err === "server_error") {
+      setErrorMsg("Authentication failed. Please try again.");
+    }
+  }, [searchParams]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleClearSession = async () => {
+    await handleLogout();
+    setErrorMsg("");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const user = await handleLogin({ email: form.email, password: form.password });
-    if(user.role == "buyer"){
-      navigate("/");
-    } else if (user.role == "seller"){
-      navigate("/seller/dashboard")
+    setErrorMsg("");
+    setSubmitting(true);
+    try {
+      const user = await handleLogin({ email: form.email, password: form.password });
+      if (user?.role === "seller") {
+        navigate("/seller/dashboard");
+      } else {
+        navigate("/");
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || err.message || "Invalid credentials or login failed.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -102,6 +127,28 @@ const Login = () => {
             </p>
           </div>
 
+          {/* Error Banner */}
+          {errorMsg && (
+            <div className="mb-6 p-4 rounded-sm bg-red-950/40 border border-red-500/40 text-red-300 text-xs space-y-2">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+                <span className="font-bold uppercase tracking-wider text-[11px]">Authentication Error</span>
+              </div>
+              <p className="text-zinc-300">{errorMsg}</p>
+              {errorMsg.toLowerCase().includes("blacklist") && (
+                <button
+                  type="button"
+                  onClick={handleClearSession}
+                  className="mt-2 text-[10px] uppercase font-bold tracking-wider text-yellow-400 hover:text-yellow-300 underline underline-offset-4 cursor-pointer"
+                >
+                  Clear Stored Session & Retry
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -120,9 +167,22 @@ const Login = () => {
             </div>
 
             <div className="pt-2 space-y-4">
-              <button type="submit" className="group w-full bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black py-4 text-xs tracking-[0.3em] uppercase transition-all duration-200 rounded-sm cursor-pointer flex items-center justify-center gap-3">
-                Sign In
-                <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="group w-full bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black py-4 text-xs tracking-[0.3em] uppercase transition-all duration-200 rounded-sm cursor-pointer flex items-center justify-center gap-3 disabled:opacity-60"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In</span>
+                    <span className="transition-transform duration-200 group-hover:translate-x-1">→</span>
+                  </>
+                )}
               </button>
 
               <div className="flex items-center gap-3">
