@@ -101,6 +101,14 @@ const matchesCategory = (product, selectedCategory) => {
   }
 }
 
+// Calculate total available inventory for a product across all variants or base stock
+const getProductStock = (product) => {
+  if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+    return product.variants.reduce((acc, v) => acc + Math.max(0, Number(v.stock) || 0), 0)
+  }
+  return Math.max(0, Number(product?.stock) || 0)
+}
+
 const Home = () => {
   const products = useSelector((state) => state.product.products) || []
   const user = useSelector((state) => state.auth?.user)
@@ -193,8 +201,14 @@ const Home = () => {
       list = list.filter((p) => matchesCategory(p, selectedCategory))
     }
 
+    // Stock availability filter
+    if (sortBy === 'in-stock') {
+      list = list.filter((p) => getProductStock(p) > 0)
+    }
+    // 'include-out-of-stock' explicitly retains all items (both in-stock and out-of-stock)
+
     // Sorting
-    if (sortBy === 'newest') {
+    if (sortBy === 'newest' || sortBy === 'in-stock' || sortBy === 'include-out-of-stock') {
       list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     } else if (sortBy === 'price-low') {
       list.sort((a, b) => (a.price?.amount || 0) - (b.price?.amount || 0))
@@ -219,13 +233,6 @@ const Home = () => {
     const item = product.images[index]
     if (typeof item === 'string') return item
     return item?.url || null
-  }
-
-  const getProductStock = (product) => {
-    if (product?.variants && Array.isArray(product.variants) && product.variants.length > 0) {
-      return product.variants.reduce((acc, v) => acc + Math.max(0, Number(v.stock) || 0), 0)
-    }
-    return Math.max(0, Number(product?.stock) || 0)
   }
 
   const scrollToCatalog = () => {
@@ -553,7 +560,7 @@ const Home = () => {
               {filteredProducts.length} {filteredProducts.length === 1 ? 'Garment' : 'Garments'}
             </span>
 
-            {/* Sort Dropdown */}
+            {/* Sort & Filter Dropdown */}
             <div className="relative">
               <select
                 value={sortBy}
@@ -563,6 +570,8 @@ const Home = () => {
                 <option value="newest" className="bg-[#0a0a0a]">Latest Drops</option>
                 <option value="price-low" className="bg-[#0a0a0a]">Price: Low to High</option>
                 <option value="price-high" className="bg-[#0a0a0a]">Price: High to Low</option>
+                <option value="in-stock" className="bg-[#0a0a0a]">In Stock</option>
+                <option value="include-out-of-stock" className="bg-[#0a0a0a]">Include Out of Stock</option>
                 <option value="title" className="bg-[#0a0a0a]">Name (A - Z)</option>
               </select>
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none text-[10px]">
@@ -658,19 +667,28 @@ const Home = () => {
               </svg>
             </div>
             <p className="text-white font-bold text-sm mb-1.5 uppercase tracking-wider">
-              {selectedCategory !== 'ALL' ? `No ${selectedCategory} Available` : 'No matching garments found'}
+              {sortBy === 'in-stock'
+                ? `No In-Stock ${selectedCategory !== 'ALL' ? selectedCategory : 'Garments'} Found`
+                : selectedCategory !== 'ALL'
+                ? `No ${selectedCategory} Available`
+                : 'No matching garments found'}
             </p>
             <p className="text-zinc-500 text-xs mb-5">
-              {selectedCategory !== 'ALL'
+              {sortBy === 'in-stock'
+                ? 'All garments under this selection are currently out of stock. Try selecting "Include Out of Stock" or switch category.'
+                : selectedCategory !== 'ALL'
                 ? `Currently there are no products listed under ${selectedCategory}.`
                 : 'Our shelves are currently being updated.'}
             </p>
             <button
               type="button"
-              onClick={() => setSelectedCategory('ALL')}
+              onClick={() => {
+                setSelectedCategory('ALL')
+                setSortBy('newest')
+              }}
               className="inline-flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-bold px-5 py-2.5 text-xs uppercase tracking-wider rounded-sm transition-all cursor-pointer shadow-sm"
             >
-              <span>View All Garments</span>
+              <span>Reset All Filters</span>
               <span>→</span>
             </button>
           </div>

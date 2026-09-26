@@ -19,6 +19,8 @@ const COLOR_SUGGESTIONS = [
   { name: 'Crimson', hex: '#991b1b' },
 ]
 
+const SIZE_SUGGESTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '30', '32', '34', 'FREE SIZE']
+
 const CreateProduct = () => {
   const { handleCreateProduct } = useProduct()
   const navigate = useNavigate()
@@ -29,6 +31,7 @@ const CreateProduct = () => {
     description: '',
     category: 'TSHIRTS',
     color: '',
+    size: 'M',
     stock: '25',
     priceAmount: '',
     priceCurrency: 'INR',
@@ -85,6 +88,7 @@ const CreateProduct = () => {
       formData.append('description', form.description)
       formData.append('category', form.category || 'TSHIRTS')
       formData.append('color', form.color ? form.color.trim() : '')
+      formData.append('size', form.size ? form.size.trim() : 'M')
       formData.append('stock', form.stock || '25')
       formData.append('priceAmount', form.priceAmount)
       formData.append('priceCurrency', form.priceCurrency)
@@ -317,6 +321,53 @@ const CreateProduct = () => {
           <p className="text-zinc-600 text-[11px] mt-1.5">
             Uploaded photos will be tied to this colour so buyers can view photos by selecting this colour.
           </p>
+        </div>
+
+        {/* Garment Size Attribute */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className={`${labelClass} mb-0`}>
+              Garment Size <span className="text-yellow-400 font-bold tracking-normal">(Variant Attribute)</span>
+            </label>
+            {form.size && (
+              <span className="text-yellow-400 text-xs font-mono font-bold uppercase tracking-wider">
+                Selected: {form.size}
+              </span>
+            )}
+          </div>
+
+          {/* Quick Size Presets */}
+          <div className="flex flex-wrap gap-2 mb-3 pt-1">
+            {SIZE_SUGGESTIONS.map((sz) => {
+              const isSelected = (form.size || '').trim().toUpperCase() === sz.toUpperCase()
+              return (
+                <button
+                  key={sz}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, size: sz }))}
+                  className={`px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-yellow-400 text-zinc-950 font-bold border-yellow-400 shadow-md scale-[1.02]'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700'
+                  }`}
+                >
+                  {sz}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Custom Size Input */}
+          <div className="relative">
+            <input
+              type="text"
+              name="size"
+              value={form.size}
+              onChange={handleChange}
+              placeholder="Or enter custom size (e.g. 28, 36, Oversized L)..."
+              className={inputClass}
+            />
+          </div>
         </div>
 
         {/* Description */}
