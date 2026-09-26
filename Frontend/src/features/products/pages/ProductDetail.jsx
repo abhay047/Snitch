@@ -18,16 +18,22 @@ const ProductDetail = () => {
   const navigate = useNavigate()
   const { handleGetProductById } = useProduct()
   const { handleGetMe, handleBecomeSeller } = useAuth()
-  const {handleAddItem} = useCart()
+  const { handleAddItem, handleGetCart } = useCart()
 
   const user = useSelector((state) => state.auth?.user)
   const authLoading = useSelector((state) => state.auth?.loading)
+  const cartItems = useSelector((state) => state.cart?.items) || []
+  const cartItemCount = useMemo(() => {
+    return cartItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0)
+  }, [cartItems])
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [quantity, setQuantity] = useState(1)
+  const [isAddingToBag, setIsAddingToBag] = useState(false)
+  const [isBuyingNow, setIsBuyingNow] = useState(false)
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
   const [showBecomeSellerModal, setShowBecomeSellerModal] = useState(false)
   const [upgradingToSeller, setUpgradingToSeller] = useState(false)
@@ -50,12 +56,14 @@ const ProductDetail = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [productId])
 
-  // Fetch auth session on mount if needed
+  // Fetch auth session and cart on mount
   useEffect(() => {
     if (!user) {
       handleGetMe?.().catch(() => {})
+    } else {
+      handleGetCart?.().catch(() => {})
     }
-  }, [])
+  }, [user])
 
   // Close user dropdown on outside click
   useEffect(() => {
@@ -818,12 +826,12 @@ const ProductDetail = () => {
                   )}
                 </div>
 
-                {/* Bag Icon (Visual only) */}
-                <button
-                  type="button"
-                  title="Bag"
+                {/* Bag Link -> Navigates to /cart */}
+                <Link
+                  to="/cart"
+                  title="View Shopping Bag"
                   aria-label="Shopping Bag"
-                  className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center"
+                  className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center select-none"
                 >
                   <svg
                     className="w-5 h-5 text-zinc-300 group-hover:text-white transition-colors"
@@ -839,12 +847,35 @@ const ProductDetail = () => {
                     />
                   </svg>
                   <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
-                    0
+                    {cartItemCount}
                   </span>
-                </button>
+                </Link>
               </div>
             ) : (
               <div className="flex items-center gap-3">
+                <Link
+                  to="/cart"
+                  title="View Shopping Bag"
+                  aria-label="Shopping Bag"
+                  className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center select-none"
+                >
+                  <svg
+                    className="w-5 h-5 text-zinc-300 group-hover:text-white transition-colors"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+                    />
+                  </svg>
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
+                    {cartItemCount}
+                  </span>
+                </Link>
                 <Link
                   to="/login"
                   className="text-zinc-300 hover:text-white text-xs tracking-wider uppercase font-semibold transition-colors px-3 py-2"
@@ -1392,41 +1423,82 @@ const ProductDetail = () => {
                       {/* Buy Now Button (High Priority CTA) */}
                       <button
                         type="button"
-                        disabled={!isSelectionComplete || currentStock <= 0}
-                        onClick={() => {
+                        disabled={!isSelectionComplete || currentStock <= 0 || isBuyingNow || isAddingToBag}
+                        onClick={async () => {
+                          if (!user) {
+                            navigate('/login')
+                            return
+                          }
                           if (!isSelectionComplete || currentStock <= 0) return
-                          showBagToast(`Proceeding to checkout (${quantity} unit${quantity > 1 ? 's' : ''})...`)
+
+                          try {
+                            setIsBuyingNow(true)
+                            await handleAddItem({
+                              productId: product._id,
+                              variantId: selectedVariant?._id || selectedVariantId || undefined,
+                              quantity,
+                            })
+                            navigate('/cart')
+                          } catch (err) {
+                            showBagToast(err?.response?.data?.message || 'Failed to proceed to checkout')
+                            setIsBuyingNow(false)
+                          }
                         }}
                         className={`w-full font-black py-4 px-6 text-xs sm:text-sm tracking-[0.25em] uppercase rounded-sm transition-all duration-200 flex items-center justify-center gap-2.5 ${
-                          !isSelectionComplete || currentStock <= 0
+                          !isSelectionComplete || currentStock <= 0 || isBuyingNow || isAddingToBag
                             ? 'bg-zinc-800/80 text-zinc-500 border border-zinc-700/40 cursor-not-allowed shadow-none'
                             : 'bg-yellow-400 hover:bg-yellow-300 active:scale-[0.99] text-zinc-950 cursor-pointer shadow-xl shadow-yellow-400/10'
                         }`}
                       >
-                        <svg className={`w-4 h-4 stroke-[2.5] ${!isSelectionComplete || currentStock <= 0 ? 'text-zinc-500' : 'text-zinc-950'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                        </svg>
-                        <span>Buy Now</span>
+                        {isBuyingNow ? (
+                          <div className="w-4 h-4 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className={`w-4 h-4 stroke-[2.5] ${!isSelectionComplete || currentStock <= 0 ? 'text-zinc-500' : 'text-zinc-950'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                          </svg>
+                        )}
+                        <span>{isBuyingNow ? 'Proceeding...' : 'Buy Now'}</span>
                       </button>
 
                       {/* Add To Bag Button (Secondary Luxury Border CTA) */}
                       <button
                         type="button"
-                        disabled={!isSelectionComplete || currentStock <= 0}
-                        onClick={() => {
+                        disabled={!isSelectionComplete || currentStock <= 0 || isAddingToBag || isBuyingNow}
+                        onClick={async () => {
+                          if (!user) {
+                            navigate('/login')
+                            return
+                          }
                           if (!isSelectionComplete || currentStock <= 0) return
-                          showBagToast(`Added ${quantity} to your bag!`)
+
+                          try {
+                            setIsAddingToBag(true)
+                            await handleAddItem({
+                              productId: product._id,
+                              variantId: selectedVariant?._id || selectedVariantId || undefined,
+                              quantity,
+                            })
+                            showBagToast(`Added ${quantity} unit${quantity > 1 ? 's' : ''} to your bag!`)
+                          } catch (err) {
+                            showBagToast(err?.response?.data?.message || 'Failed to add item to bag')
+                          } finally {
+                            setIsAddingToBag(false)
+                          }
                         }}
                         className={`w-full font-bold py-4 px-6 text-xs sm:text-sm tracking-[0.2em] uppercase rounded-sm transition-all duration-200 flex items-center justify-center gap-2.5 ${
-                          !isSelectionComplete || currentStock <= 0
+                          !isSelectionComplete || currentStock <= 0 || isAddingToBag || isBuyingNow
                             ? 'border-2 border-zinc-800 bg-zinc-900/30 text-zinc-500 cursor-not-allowed'
                             : 'border-2 border-zinc-700 hover:border-white bg-zinc-900/60 hover:bg-zinc-800 text-white cursor-pointer'
                         }`}
                       >
-                        <svg className={`w-4 h-4 ${!isSelectionComplete || currentStock <= 0 ? 'text-zinc-600' : 'text-zinc-400'}`} fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                        </svg>
-                        <span>Add To Bag</span>
+                        {isAddingToBag ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className={`w-4 h-4 ${!isSelectionComplete || currentStock <= 0 ? 'text-zinc-600' : 'text-zinc-400'}`} fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                          </svg>
+                        )}
+                        <span>{isAddingToBag ? 'Adding...' : 'Add To Bag'}</span>
                       </button>
 
                       {!isSelectionComplete && (

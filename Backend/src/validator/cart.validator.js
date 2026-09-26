@@ -1,10 +1,12 @@
-import {param, body, validationResult} from "express-validator"
+import { param, body, validationResult } from "express-validator"
 
-const validateRequest = (req,res,next)=>{
-    const errors = validateRequest(req);
-    if(!errors.isEmpty()){
+const validateRequest = (req, res, next) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
         return res.status(400).json({
-            errors : errors.array()
+            message: errors.array()[0]?.msg || "Validation error",
+            errors: errors.array(),
+            success: false
         })
     }
     next()
@@ -12,7 +14,18 @@ const validateRequest = (req,res,next)=>{
 
 export const validateAddToCart = [
     param("productId").isMongoId().withMessage("Invalid product ID"),
-    param("varientId").isMongoId().withMessage("Invalid variant ID"),
-    body("quantity").optional().isInt({min:1}).withMessage("Quantity must be at least 1"),
+    param("variantId").optional().isMongoId().withMessage("Invalid variant ID"),
+    body("quantity").optional().isInt({ min: 1 }).withMessage("Quantity must be at least 1"),
+    validateRequest
+]
+
+export const validateUpdateQuantity = [
+    param("itemId").isMongoId().withMessage("Invalid item ID"),
+    body("quantity").isInt({ min: 0 }).withMessage("Quantity must be a non-negative integer"),
+    validateRequest
+]
+
+export const validateRemoveItem = [
+    param("itemId").isMongoId().withMessage("Invalid item ID"),
     validateRequest
 ]

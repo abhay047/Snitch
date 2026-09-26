@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { useProduct } from '../hook/useProduct'
 import { useAuth } from '../../auth/hook/useAuth'
+import { useCart } from '../../cart/hook/useCart'
 import { Link, useNavigate } from 'react-router'
 
 const CURRENCY_SYMBOLS = {
@@ -115,12 +116,24 @@ const Home = () => {
   const authLoading = useSelector((state) => state.auth?.loading)
   const { handleGetAllProducts } = useProduct()
   const { handleGetMe, handleBecomeSeller } = useAuth()
+  const { handleGetCart } = useCart()
+  const cartItems = useSelector((state) => state.cart?.items) || []
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('ALL')
   const [sortBy, setSortBy] = useState('newest')
+
+  const cartItemCount = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0)
+  }, [cartItems])
+
+  useEffect(() => {
+    if (user && handleGetCart) {
+      handleGetCart().catch(() => {})
+    }
+  }, [user])
 
   // Calculate product counts per category
   const categoryCounts = useMemo(() => {
@@ -434,12 +447,12 @@ const Home = () => {
                   )}
                 </div>
 
-                {/* Bag Icon (Visual only) */}
-                <button
-                  type="button"
-                  title="Bag"
+                {/* Bag Link -> Navigates to /cart */}
+                <Link
+                  to="/cart"
+                  title="View Shopping Bag"
                   aria-label="Shopping Bag"
-                  className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center"
+                  className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center select-none"
                 >
                   <svg
                     className="w-5 h-5 text-zinc-300 group-hover:text-white transition-colors"
@@ -455,12 +468,35 @@ const Home = () => {
                     />
                   </svg>
                   <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
-                    0
+                    {cartItemCount}
                   </span>
-                </button>
+                </Link>
               </div>
             ) : (
               <div className="flex items-center gap-3">
+                <Link
+                  to="/cart"
+                  title="View Shopping Bag"
+                  aria-label="Shopping Bag"
+                  className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center select-none"
+                >
+                  <svg
+                    className="w-5 h-5 text-zinc-300 group-hover:text-white transition-colors"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+                    />
+                  </svg>
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
+                    {cartItemCount}
+                  </span>
+                </Link>
                 <Link
                   to="/login"
                   className="text-zinc-300 hover:text-white text-xs tracking-wider uppercase font-semibold transition-colors px-3 py-2"
