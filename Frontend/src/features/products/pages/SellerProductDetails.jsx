@@ -597,12 +597,12 @@ const SellerProductDetails = () => {
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.02)_0%,transparent_70%)] pointer-events-none" />
 
       {/* ── TOP ANNOUNCEMENT BAR ── */}
-      <div className="bg-yellow-400 text-zinc-950 px-4 py-2 text-center text-[11px] font-black tracking-[0.25em] uppercase select-none">
+      <div className="bg-yellow-400 text-zinc-950 px-4 py-2 text-center text-[11px] font-black tracking-[0.25em] uppercase select-none relative z-10">
         <span>Snitch Seller Studio • Catalogue Management</span>
       </div>
 
-      {/* ── TOP NAVIGATION BAR ── */}
-      <header className="border-b border-zinc-900 bg-[#0a0a0a]/90 backdrop-blur-md sticky top-0 z-40 transition-all">
+      {/* ── TOP NAVIGATION BAR (STICKY WITH FROSTED GLASS EFFECT) ── */}
+      <header className="border-b border-zinc-800/80 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-40 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 h-20 flex items-center justify-between gap-4">
           {/* Left: Brand Identity & Studio Badge */}
           <div className="flex items-center gap-6">

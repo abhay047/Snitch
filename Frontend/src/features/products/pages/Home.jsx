@@ -233,47 +233,100 @@ const Home = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative overflow-hidden font-sans selection:bg-yellow-400 selection:text-zinc-950">
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative font-sans selection:bg-yellow-400 selection:text-zinc-950">
 
       {/* Ambient background glows */}
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.04)_0%,transparent_70%)] pointer-events-none" />
-      <div className="absolute top-[40%] left-[-100px] w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.02)_0%,transparent_70%)] pointer-events-none" />
-
-      {/* ── TOP ANNOUNCEMENT BAR ── */}
-      <div className="bg-zinc-950 border-b border-zinc-900/80 py-2 px-4 text-center">
-        <p className="text-[11px] tracking-[0.25em] text-zinc-400 uppercase font-medium">
-          Complimentary shipping on orders above <span className="text-yellow-400 font-semibold">₹999</span> · New Drops Every Friday
-        </p>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.04)_0%,transparent_70%)]" />
+        <div className="absolute top-[40%] left-[-100px] w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.02)_0%,transparent_70%)]" />
       </div>
 
-      {/* ── MAIN NAVBAR ── */}
-      <header className="border-b border-zinc-900 bg-[#0a0a0a]/90 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between gap-6">
+      {/* ── TOP ANNOUNCEMENT BAR ── */}
+      <div className="bg-yellow-400 text-zinc-950 px-4 py-2 text-center text-[11px] font-black tracking-[0.25em] uppercase select-none relative z-10">
+        <span>Snitch Store • Complimentary Express Shipping On All Orders</span>
+      </div>
 
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 shrink-0">
-            <img src="/Logo.png" alt="Snitch" className="w-8 h-8 object-contain" />
-            <span className="text-white font-bold text-xl tracking-[0.2em] uppercase">
-              Snitch
-            </span>
-          </Link>
+      {/* ── MAIN NAVBAR (STICKY WITH FROSTED GLASS EFFECT) ── */}
+      <header className="border-b border-zinc-800/80 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-40 transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 h-20 flex items-center justify-between gap-4">
 
+          {/* Left: Brand Identity & Studio Badge */}
+          <div className="flex items-center gap-4 sm:gap-6">
+            <Link to="/" className="flex items-center gap-3 group">
+              <img
+                src="/Logo.png"
+                alt="Snitch Logo"
+                className="w-8 h-8 object-contain transition-transform group-hover:scale-105"
+              />
+              <span className="text-white font-bold text-xl tracking-[0.2em] uppercase">
+                Snitch
+              </span>
+            </Link>
+
+            <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
+
+            {user?.role === 'seller' ? (
+              <Link
+                to="/seller/dashboard"
+                className="hidden sm:flex items-center gap-2 group transition-colors"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="text-zinc-400 group-hover:text-white text-[10px] tracking-[0.25em] uppercase font-medium">
+                  Seller Studio
+                </span>
+              </Link>
+            ) : (
+              <div className="hidden sm:flex items-center gap-2 select-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="text-zinc-400 text-[10px] tracking-[0.25em] uppercase font-medium">
+                  Snitch Store
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Center Navigation: Explore Drops Link */}
+          <div className="hidden md:flex items-center gap-6 text-xs uppercase tracking-widest font-semibold">
+            <button
+              type="button"
+              onClick={scrollToCatalog}
+              className="text-zinc-400 hover:text-white flex items-center gap-2 transition-colors py-1 cursor-pointer select-none"
+            >
+              <span>Explore Drops</span>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+              </svg>
+            </button>
+          </div>
 
           {/* Right Navigation / User Actions */}
-          <div className="flex items-center gap-4 sm:gap-6">
+          <div className="flex items-center gap-3 sm:gap-4">
             {authLoading ? (
               <div className="h-8 w-24 bg-zinc-900/60 animate-pulse rounded-sm" />
             ) : user ? (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
                 {user.role === 'seller' && (
-                  <Link
-                    to="/seller/dashboard"
-                    className="text-xs tracking-wider uppercase text-yellow-400 hover:text-yellow-300 font-semibold flex items-center gap-1.5 transition-colors"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                    <span>Seller Studio</span>
-                  </Link>
+                  <>
+                    <Link
+                      to="/seller/dashboard"
+                      className="text-zinc-400 hover:text-white text-xs tracking-wider uppercase font-semibold hidden md:flex items-center gap-1.5 transition-colors px-3 py-2 border border-zinc-800/80 hover:border-zinc-700 rounded-sm bg-zinc-900/40"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                      </svg>
+                      <span>Dashboard</span>
+                    </Link>
+
+                    <Link
+                      to="/seller/create-product"
+                      className="group bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-3.5 sm:px-4 py-2 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm hidden lg:flex items-center gap-1.5 shadow-sm"
+                    >
+                      <span className="text-sm leading-none font-bold">+</span>
+                      <span>New Drop</span>
+                    </Link>
+                  </>
                 )}
+
                 {/* User Profile Dropdown Trigger */}
                 <div className="relative" ref={userDropdownRef}>
                   <button
@@ -281,7 +334,7 @@ const Home = () => {
                     onClick={() => setIsUserDropdownOpen((prev) => !prev)}
                     className="flex items-center gap-2 p-1 -m-1 rounded-sm hover:bg-zinc-900/60 transition-colors cursor-pointer group select-none"
                   >
-                    <div className="w-8 h-8 rounded-full bg-yellow-400/10 border border-yellow-400/30 group-hover:border-yellow-400/60 flex items-center justify-center text-yellow-400 font-bold text-xs uppercase transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-zinc-500 flex items-center justify-center text-zinc-200 font-bold text-xs uppercase transition-colors">
                       {user.fullname ? user.fullname[0] : 'U'}
                     </div>
                     <span className="text-zinc-300 group-hover:text-white text-xs hidden sm:inline font-medium transition-colors">
@@ -289,7 +342,7 @@ const Home = () => {
                     </span>
                     <svg
                       className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${
-                        isUserDropdownOpen ? 'rotate-180 text-yellow-400' : ''
+                        isUserDropdownOpen ? 'rotate-180 text-white' : ''
                       }`}
                       fill="none"
                       stroke="currentColor"
@@ -306,7 +359,7 @@ const Home = () => {
                       <div className="px-4 py-2.5 border-b border-zinc-900">
                         <p className="text-white text-xs font-bold truncate">{user.fullname || 'Member'}</p>
                         <p className="text-zinc-500 text-[11px] truncate mt-0.5">{user.email}</p>
-                        <span className="inline-block mt-2 text-[9px] tracking-widest uppercase px-2 py-0.5 rounded-sm bg-zinc-900 text-yellow-400 border border-yellow-400/20 font-bold">
+                        <span className="inline-block mt-2 text-[9px] tracking-widest uppercase px-2 py-0.5 rounded-sm bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold">
                           {user.role}
                         </span>
                       </div>
@@ -321,9 +374,9 @@ const Home = () => {
                               setIsUserDropdownOpen(false)
                               setShowBecomeSellerModal(true)
                             }}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 rounded-sm transition-colors text-left font-medium cursor-pointer"
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 rounded-sm transition-colors text-left font-medium cursor-pointer"
                           >
-                            <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.614A2.993 2.993 0 009 9.35c.828 0 1.579-.336 2.122-.88a3.001 3.001 0 004.256 0 2.993 2.993 0 002.122.88 3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l2.19 2.19a3.004 3.004 0 01-.62 4.72" />
                             </svg>
                             <span>Become a Seller</span>
@@ -336,9 +389,9 @@ const Home = () => {
                             <Link
                               to="/seller/dashboard"
                               onClick={() => setIsUserDropdownOpen(false)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 rounded-sm transition-colors text-left font-medium"
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 rounded-sm transition-colors text-left font-medium"
                             >
-                              <svg className="w-4 h-4 text-yellow-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
                               </svg>
                               <span>Seller Studio</span>
@@ -347,7 +400,7 @@ const Home = () => {
                             <Link
                               to="/seller/create-product"
                               onClick={() => setIsUserDropdownOpen(false)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-sm transition-colors text-left font-medium"
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800/60 rounded-sm transition-colors text-left font-medium"
                             >
                               <svg className="w-4 h-4 text-zinc-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -359,7 +412,7 @@ const Home = () => {
 
                         <div className="h-px bg-zinc-900 my-1" />
 
-                        {/* Log out button (only button, without functionality) */}
+                        {/* Pure Log Out Button */}
                         <button
                           type="button"
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-sm transition-colors text-left font-medium cursor-pointer"
@@ -374,7 +427,7 @@ const Home = () => {
                   )}
                 </div>
 
-                {/* Bag Icon (Visual only, no functionality) */}
+                {/* Bag Icon (Visual only) */}
                 <button
                   type="button"
                   title="Bag"
@@ -382,7 +435,7 @@ const Home = () => {
                   className="relative p-2 text-zinc-300 hover:text-white hover:bg-zinc-900/60 rounded-full transition-colors cursor-pointer group flex items-center justify-center"
                 >
                   <svg
-                    className="w-5 h-5 text-zinc-300 group-hover:text-yellow-400 transition-colors"
+                    className="w-5 h-5 text-zinc-300 group-hover:text-white transition-colors"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.75"
@@ -409,7 +462,7 @@ const Home = () => {
                 </Link>
                 <Link
                   to="/register"
-                  className="bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-4 py-2 text-xs tracking-[0.2em] uppercase rounded-sm transition-all shadow-sm"
+                  className="bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-4 py-2.5 text-[11px] tracking-[0.2em] uppercase rounded-sm transition-all shadow-sm"
                 >
                   Join Club
                 </Link>
@@ -417,8 +470,6 @@ const Home = () => {
             )}
           </div>
         </div>
-
-
       </header>
 
       {/* ── HERO EDITORIAL BANNER ── */}
@@ -778,53 +829,30 @@ const Home = () => {
             {/* Header */}
             <div className="mb-6">
               <div className="inline-flex items-center gap-2 mb-3">
-                <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-                <span className="text-yellow-400 text-[10px] tracking-[0.3em] uppercase font-bold">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-zinc-400 text-[10px] tracking-[0.3em] uppercase font-bold">
                   Seller Studio
                 </span>
               </div>
-              <h3 className="text-white text-2xl font-black tracking-tight uppercase">
-                Convert to Seller?
-              </h3>
+              <h3 className="text-white text-xl font-bold tracking-tight">Become a Snitch Seller</h3>
               <p className="text-zinc-400 text-xs mt-2 leading-relaxed">
-                You are currently signed in as a <span className="text-white font-semibold">Buyer</span> ({user?.email}).
+                Convert your buyer account to a verified seller account to create drops and list garments.
               </p>
             </div>
 
-            {/* Role Transition Card */}
-            <div className="bg-zinc-950/70 border border-zinc-900 rounded-sm p-4 mb-6 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-500 uppercase tracking-wider text-[10px]">Current Role</span>
-                <span className="text-zinc-400 font-semibold px-2.5 py-0.5 rounded-sm bg-zinc-900 border border-zinc-800 uppercase text-[10px]">
-                  Buyer
-                </span>
-              </div>
-              <div className="h-px bg-zinc-900" />
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-yellow-400 uppercase tracking-wider text-[10px] font-bold">New Role</span>
-                <span className="text-zinc-950 font-black px-2.5 py-0.5 rounded-sm bg-yellow-400 uppercase text-[10px]">
-                  Seller
-                </span>
-              </div>
-            </div>
-
-            <p className="text-zinc-400 text-xs leading-relaxed mb-6">
-              Converting your account gives you instant access to the <span className="text-yellow-400 font-medium">Seller Studio</span>, allowing you to list products, create drops, and sell to shoppers across Snitch.
-            </p>
-
             {upgradeError && (
-              <div className="border border-red-500/30 bg-red-950/20 text-red-400 text-xs p-3 rounded-sm mb-4">
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-sm text-red-400 text-xs">
                 {upgradeError}
               </div>
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 disabled={upgradingToSeller}
                 onClick={() => setShowBecomeSellerModal(false)}
-                className="flex-1 border border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 text-zinc-400 hover:text-white py-3.5 text-xs tracking-wider uppercase rounded-sm transition-all cursor-pointer font-bold disabled:opacity-50"
+                className="flex-1 py-3 px-4 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 text-zinc-300 text-xs tracking-wider uppercase font-semibold rounded-sm transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -833,18 +861,15 @@ const Home = () => {
                 type="button"
                 disabled={upgradingToSeller}
                 onClick={handleBecomeSellerConfirm}
-                className="flex-1 bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black py-3.5 text-xs tracking-[0.2em] uppercase rounded-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                className="flex-1 py-3 px-4 bg-white hover:bg-zinc-200 active:scale-[0.98] text-zinc-950 text-xs tracking-wider uppercase font-bold rounded-sm transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {upgradingToSeller ? (
                   <>
-                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
+                    <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
                     <span>Upgrading...</span>
                   </>
                 ) : (
-                  <span>Confirm & Upgrade</span>
+                  <span>Confirm</span>
                 )}
               </button>
             </div>

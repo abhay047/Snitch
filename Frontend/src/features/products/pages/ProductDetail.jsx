@@ -558,38 +558,61 @@ const ProductDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans relative overflow-x-hidden selection:bg-yellow-400 selection:text-black">
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans relative selection:bg-yellow-400 selection:text-black">
       {/* Ambient background glows */}
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.035)_0%,transparent_70%)] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.025)_0%,transparent_70%)] pointer-events-none" />
-
-      {/* ── TOP ANNOUNCEMENT BAR ── */}
-      <div className="bg-zinc-950 border-b border-zinc-900/80 py-2 px-4 text-center relative z-10">
-        <p className="text-[11px] tracking-[0.25em] text-zinc-400 uppercase font-medium">
-          Complimentary Express Shipping On All Premium Drops
-        </p>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.035)_0%,transparent_70%)]" />
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.025)_0%,transparent_70%)]" />
       </div>
 
-      {/* ── NAVBAR ── */}
-      <header className="sticky top-0 z-40 bg-[#0a0a0a]/90 backdrop-blur-md border-b border-zinc-900 transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-4">
-          {/* Left: Brand Identity */}
-          <Link to="/" className="flex items-center gap-3 group">
-            <img
-              src="/Logo.png"
-              alt="Snitch Logo"
-              className="w-8 h-8 sm:w-9 sm:h-9 object-contain group-hover:rotate-6 transition-transform duration-300"
-            />
-            <span className="text-white text-xl sm:text-2xl font-black tracking-[0.25em] uppercase group-hover:text-white transition-colors">
-              Snitch
-            </span>
-          </Link>
+      {/* ── TOP ANNOUNCEMENT BAR ── */}
+      <div className="bg-yellow-400 text-zinc-950 px-4 py-2 text-center text-[11px] font-black tracking-[0.25em] uppercase select-none relative z-10">
+        <span>Snitch Exclusive Drop • Complimentary Express Shipping</span>
+      </div>
+
+      {/* ── NAVBAR (STICKY WITH FROSTED GLASS EFFECT) ── */}
+      <header className="border-b border-zinc-800/80 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-40 transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 h-20 flex items-center justify-between gap-4">
+          {/* Left: Brand Identity & Studio Badge */}
+          <div className="flex items-center gap-4 sm:gap-6">
+            <Link to="/" className="flex items-center gap-3 group">
+              <img
+                src="/Logo.png"
+                alt="Snitch Logo"
+                className="w-8 h-8 object-contain transition-transform group-hover:scale-105"
+              />
+              <span className="text-white font-bold text-xl tracking-[0.2em] uppercase">
+                Snitch
+              </span>
+            </Link>
+
+            <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
+
+            {user?.role === 'seller' ? (
+              <Link
+                to="/seller/dashboard"
+                className="hidden sm:flex items-center gap-2 group transition-colors"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="text-zinc-400 group-hover:text-white text-[10px] tracking-[0.25em] uppercase font-medium">
+                  Seller Studio
+                </span>
+              </Link>
+            ) : (
+              <div className="hidden sm:flex items-center gap-2 select-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="text-zinc-400 text-[10px] tracking-[0.25em] uppercase font-medium">
+                  Snitch Store
+                </span>
+              </div>
+            )}
+          </div>
 
           {/* Center Navigation: Back to Collection Link */}
           <div className="hidden md:flex items-center gap-6 text-xs uppercase tracking-widest font-semibold">
             <Link
               to="/"
-              className="text-zinc-400 hover:text-white flex items-center gap-2 transition-colors py-1"
+              className="text-zinc-400 hover:text-white flex items-center gap-2 transition-colors py-1 cursor-pointer"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
@@ -599,19 +622,31 @@ const ProductDetail = () => {
           </div>
 
           {/* Right Navigation: User Profile, Bag Icon & Auth Actions */}
-          <div className="flex items-center gap-3 sm:gap-5">
+          <div className="flex items-center gap-3 sm:gap-4">
             {authLoading ? (
               <div className="h-8 w-24 bg-zinc-900/60 animate-pulse rounded-sm" />
             ) : user ? (
               <div className="flex items-center gap-3 sm:gap-4">
                 {user.role === 'seller' && (
-                  <Link
-                    to="/seller/dashboard"
-                    className="text-xs tracking-wider uppercase text-zinc-300 hover:text-white font-semibold hidden sm:flex items-center gap-1.5 transition-colors"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span>Seller Studio</span>
-                  </Link>
+                  <>
+                    <Link
+                      to="/seller/dashboard"
+                      className="text-zinc-400 hover:text-white text-xs tracking-wider uppercase font-semibold hidden md:flex items-center gap-1.5 transition-colors px-3 py-2 border border-zinc-800/80 hover:border-zinc-700 rounded-sm bg-zinc-900/40"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+                      </svg>
+                      <span>Dashboard</span>
+                    </Link>
+
+                    <Link
+                      to="/seller/create-product"
+                      className="group bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-3.5 sm:px-4 py-2 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm hidden lg:flex items-center gap-1.5 shadow-sm"
+                    >
+                      <span className="text-sm leading-none font-bold">+</span>
+                      <span>New Drop</span>
+                    </Link>
+                  </>
                 )}
 
                 {/* User Dropdown Trigger */}
@@ -717,7 +752,7 @@ const ProductDetail = () => {
                       d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
                     />
                   </svg>
-                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-white text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-yellow-400 text-zinc-950 font-black text-[9px] rounded-full flex items-center justify-center shadow-sm">
                     0
                   </span>
                 </button>
@@ -732,7 +767,7 @@ const ProductDetail = () => {
                 </Link>
                 <Link
                   to="/register"
-                  className="bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-4 py-2 text-xs tracking-[0.2em] uppercase rounded-sm transition-all shadow-sm"
+                  className="bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-4 py-2.5 text-[11px] tracking-[0.2em] uppercase rounded-sm transition-all shadow-sm"
                 >
                   Join Club
                 </Link>

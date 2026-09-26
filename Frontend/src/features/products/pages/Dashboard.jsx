@@ -121,55 +121,79 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col font-sans selection:bg-yellow-400 selection:text-black relative">
       {/* Background ambient radial glow */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.03)_0%,transparent_70%)] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.02)_0%,transparent_70%)] pointer-events-none" />
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_top_right,rgba(250,204,21,0.03)_0%,transparent_70%)]" />
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[radial-gradient(ellipse_at_bottom_left,rgba(250,204,21,0.02)_0%,transparent_70%)]" />
+      </div>
 
-      {/* ── TOP NAVIGATION BAR ── */}
-      <header className="border-b border-zinc-900 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
-          {/* Logo & Section Title */}
+      {/* ── TOP ANNOUNCEMENT BAR ── */}
+      <div className="bg-yellow-400 text-zinc-950 px-4 py-2 text-center text-[11px] font-black tracking-[0.25em] uppercase select-none relative z-10">
+        <span>Snitch Seller Studio • Dashboard & Inventory Management</span>
+      </div>
+
+      {/* ── TOP NAVIGATION BAR (STICKY WITH FROSTED GLASS EFFECT) ── */}
+      <header className="border-b border-zinc-800/80 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-40 transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 h-20 flex items-center justify-between gap-4">
+          {/* Left: Brand Identity & Studio Badge */}
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <img src="/Logo.png" alt="Snitch" className="w-8 h-8 object-contain" />
+            <Link to="/" className="flex items-center gap-3 group">
+              <img src="/Logo.png" alt="Snitch" className="w-8 h-8 object-contain transition-transform group-hover:scale-105" />
               <span className="text-white font-bold text-xl tracking-[0.2em] uppercase">
                 Snitch
               </span>
-            </div>
+            </Link>
+
             <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
-            <div className="hidden sm:flex items-center gap-2">
+
+            <Link
+              to="/seller/dashboard"
+              className="hidden sm:flex items-center gap-2 group transition-colors"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-              <span className="text-zinc-500 text-[10px] tracking-[0.25em] uppercase font-medium">
+              <span className="text-zinc-400 group-hover:text-white text-[10px] tracking-[0.25em] uppercase font-medium">
                 Seller Studio
               </span>
-            </div>
+            </Link>
           </div>
 
-          {/* Action CTA & User Info */}
+          {/* Right: Actions & User */}
           <div className="flex items-center gap-4">
+            <Link
+              to="/"
+              className="text-zinc-400 hover:text-white text-xs tracking-wider uppercase font-semibold flex items-center gap-1.5 transition-colors px-3 py-2 border border-zinc-800/80 hover:border-zinc-700 rounded-sm bg-zinc-900/40"
+            >
+              <span>Snitch Store</span>
+              <svg className="w-3 h-3 text-zinc-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" />
+              </svg>
+            </Link>
+
             {user?.fullname && (
               <span className="text-zinc-500 text-xs hidden md:inline tracking-wider">
                 Logged in as <span className="text-zinc-300 font-medium">{user.fullname}</span>
               </span>
             )}
+
             <Link
               to="/seller/create-product"
               className="group bg-yellow-400 hover:bg-yellow-300 active:scale-[0.98] text-zinc-950 font-black px-4 sm:px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 shadow-sm"
             >
               <span className="text-sm leading-none font-bold">+</span>
-              <span>New Product</span>
+              <span className="hidden sm:inline">New Product</span>
             </Link>
 
-            {/* Log Out Button (Non-functional as requested) */}
+            {/* Non-functional Log out button */}
             <button
               type="button"
-              className="border border-zinc-800 hover:border-red-500/40 bg-zinc-900/60 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 font-semibold px-3 sm:px-4 py-2.5 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 cursor-pointer"
+              className="border border-zinc-800 hover:border-red-500/40 bg-zinc-900/60 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 font-semibold px-3 py-2.5 text-[11px] tracking-[0.15em] uppercase transition-all duration-200 rounded-sm flex items-center gap-2 cursor-pointer"
+              title="Log out (Non-functional)"
             >
               <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
               </svg>
-              <span>Log out</span>
+              <span className="hidden sm:inline">Log out</span>
             </button>
           </div>
         </div>
