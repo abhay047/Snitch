@@ -5,6 +5,7 @@ import { useProduct } from '../hook/useProduct'
 import { useAuth } from '../../auth/hook/useAuth'
 import { useCart } from '../../cart/hook/useCart'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
+import Footer from '../../Shared/Components/Footer.jsx'
 
 const CURRENCY_SYMBOLS = {
   INR: '₹',
@@ -1582,31 +1583,8 @@ const ProductDetail = () => {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-zinc-900 bg-zinc-950/80 py-12 px-4 sm:px-6 lg:px-12 mt-16 relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <img src="/Logo.png" alt="Snitch" className="w-6 h-6 object-contain" />
-              <span className="text-white font-black text-base tracking-[0.2em] uppercase">Snitch</span>
-            </div>
-            <p className="text-zinc-500 text-xs max-w-sm leading-relaxed">
-              Curated luxury streetwear & high fashion garments for the modern wardrobe.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-8 text-xs tracking-wider uppercase text-zinc-400">
-            <Link to="/" className="hover:text-white transition-colors">Home</Link>
-            <Link to="/register" className="hover:text-white transition-colors">Join Club</Link>
-            <Link to="/login" className="hover:text-white transition-colors">Sign In</Link>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto mt-8 pt-6 border-t border-zinc-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-600 tracking-wider">
-          <p>© {new Date().getFullYear()} Snitch. All rights reserved.</p>
-          <p className="uppercase tracking-widest text-zinc-500">Wear What You Are</p>
-        </div>
-      </footer>
+      {/* ── SHARED FOOTER ── */}
+      <Footer className="mt-16" />
 
       {/* ── BECOME A SELLER CONFIRMATION MODAL ── */}
       {showBecomeSellerModal && (

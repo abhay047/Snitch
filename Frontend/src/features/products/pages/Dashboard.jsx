@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useProduct } from '../hook/useProduct.js'
 import { useAuth } from '../../auth/hook/useAuth.js'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
+import Footer from '../../Shared/Components/Footer.jsx'
 import { useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router'
 
@@ -637,6 +638,9 @@ const Dashboard = () => {
           </div>
         )}
       </main>
+
+      {/* ── SHARED FOOTER ── */}
+      <Footer className="mt-16" />
 
       {/* ── LOGOUT CONFIRMATION MODAL ── */}
       <LogoutConfirmModal

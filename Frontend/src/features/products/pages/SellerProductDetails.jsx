@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux'
 import { useProduct } from '../hook/useProduct.js'
 import { useAuth } from '../../auth/hook/useAuth.js'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
+import Footer from '../../Shared/Components/Footer.jsx'
 
 const CURRENCY_SYMBOLS = {
   INR: '₹',
@@ -2049,31 +2050,8 @@ const SellerProductDetails = () => {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-zinc-900 bg-zinc-950/80 py-10 px-4 sm:px-6 lg:px-12 mt-16">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <img src="/Logo.png" alt="Snitch" className="w-6 h-6 object-contain" />
-              <span className="text-white font-black text-base tracking-[0.2em] uppercase">Snitch</span>
-            </div>
-            <p className="text-zinc-500 text-xs max-w-sm leading-relaxed">
-              Curated luxury streetwear & high fashion garments for the modern wardrobe.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-6 text-xs tracking-wider uppercase text-zinc-400">
-            <Link to="/seller/dashboard" className="hover:text-yellow-400 transition-colors">Seller Dashboard</Link>
-            <Link to="/seller/create-product" className="hover:text-yellow-400 transition-colors">New Drop</Link>
-            <Link to="/" className="hover:text-yellow-400 transition-colors">Snitch Store</Link>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto mt-6 pt-6 border-t border-zinc-900/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-600 tracking-wider">
-          <p>© {new Date().getFullYear()} Snitch Seller Studio. All rights reserved.</p>
-          <p className="uppercase tracking-widest text-zinc-500">Wear What You Are</p>
-        </div>
-      </footer>
+      {/* ── SHARED FOOTER ── */}
+      <Footer className="mt-16" />
 
       {/* ── MODAL: UPLOAD IMAGES TO EXISTING VARIANT ── */}
       {activeImageModalVariant && (

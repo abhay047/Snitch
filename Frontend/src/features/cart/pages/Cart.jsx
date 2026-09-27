@@ -5,6 +5,7 @@ import { useCart } from '../hook/useCart'
 import { useAuth } from '../../auth/hook/useAuth'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
 import ClearBagConfirmModal from '../components/ClearBagConfirmModal.jsx'
+import Footer from '../../Shared/Components/Footer.jsx'
 import { setItems } from '../state/cart.slice'
 
 const CURRENCY_SYMBOLS = {
@@ -1207,40 +1208,8 @@ const Cart = () => {
         </div>
       )}
 
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-zinc-900 bg-zinc-950/80 py-12 px-4 sm:px-6 lg:px-12 mt-16 relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <img src="/Logo.png" alt="Snitch" className="w-6 h-6 object-contain" />
-              <span className="text-white font-black text-base tracking-[0.2em] uppercase">Snitch</span>
-            </div>
-            <p className="text-zinc-500 text-xs max-w-sm leading-relaxed">
-              Curated luxury streetwear & high fashion garments for the modern wardrobe.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6 text-xs text-zinc-400 tracking-wider uppercase">
-            <Link to="/" className="hover:text-yellow-400 transition-colors">Catalog</Link>
-            <Link to="/register" className="hover:text-yellow-400 transition-colors">Join Club</Link>
-            <Link to="/login" className="hover:text-yellow-400 transition-colors">Sign In</Link>
-            <Link to="/seller/dashboard" className="text-yellow-400 hover:text-yellow-300 transition-colors">
-              Seller Studio
-            </Link>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-zinc-900/60 flex flex-col sm:flex-row items-center justify-between text-[11px] text-zinc-600 gap-4">
-          <p>© {new Date().getFullYear()} Snitch Technologies Inc. All rights reserved.</p>
-          <div className="flex items-center gap-4">
-            <span className="hover:text-zinc-400 transition-colors cursor-pointer">Privacy Policy</span>
-            <span>•</span>
-            <span className="hover:text-zinc-400 transition-colors cursor-pointer">Terms of Service</span>
-            <span>•</span>
-            <span className="hover:text-zinc-400 transition-colors cursor-pointer">Shipping & Returns</span>
-          </div>
-        </div>
-      </footer>
+      {/* ── SHARED FOOTER ── */}
+      <Footer className="mt-16" />
 
       {/* ── LOGOUT CONFIRMATION MODAL ── */}
       <LogoutConfirmModal

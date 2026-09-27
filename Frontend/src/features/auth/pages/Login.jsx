@@ -199,6 +199,23 @@ const Login = () => {
               </p>
             </div>
           </form>
+
+          {/* Privacy Policy & Terms Links */}
+          <div className="mt-8 pt-6 border-t border-zinc-900 flex items-center justify-center gap-3 text-xs text-zinc-500">
+            <Link
+              to="/policy/privacy"
+              className="hover:text-yellow-400 transition-colors"
+            >
+              Privacy Policy
+            </Link>
+            <span>•</span>
+            <Link
+              to="/policy/term&conditions"
+              className="hover:text-yellow-400 transition-colors"
+            >
+              Terms & Conditions
+            </Link>
+          </div>
         </div>
       </div>
     </div>

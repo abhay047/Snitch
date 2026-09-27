@@ -4,6 +4,7 @@ import { useProduct } from '../hook/useProduct'
 import { useAuth } from '../../auth/hook/useAuth'
 import { useCart } from '../../cart/hook/useCart'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
+import Footer from '../../Shared/Components/Footer.jsx'
 import { Link, useNavigate } from 'react-router'
 
 const CURRENCY_SYMBOLS = {
@@ -849,36 +850,8 @@ const Home = () => {
         )}
       </section>
 
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-zinc-900 bg-zinc-950/80 py-16 px-6 lg:px-12 mt-12">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-          <div>
-            <div className="flex items-center gap-3 mb-3">
-              <img src="/Logo.png" alt="Snitch" className="w-7 h-7 object-contain" />
-              <span className="text-white font-bold text-lg tracking-[0.2em] uppercase">Snitch</span>
-            </div>
-            <p className="text-zinc-500 text-xs max-w-sm leading-relaxed">
-              A modern online luxury streetwear and fashion collective. Redefining style standards.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-8 text-xs tracking-wider uppercase text-zinc-400">
-            <Link to="/" className="hover:text-yellow-400 transition-colors">Home</Link>
-            <Link to="/register" className="hover:text-yellow-400 transition-colors">Register</Link>
-            <Link to="/login" className="hover:text-yellow-400 transition-colors">Sign In</Link>
-            {user?.role === 'seller' && (
-              <Link to="/seller/dashboard" className="text-yellow-400 hover:text-yellow-300 font-semibold transition-colors">
-                Seller Studio
-              </Link>
-            )}
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto mt-12 pt-6 border-t border-zinc-900/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-600 tracking-wider">
-          <p>© {new Date().getFullYear()} Snitch. All rights reserved.</p>
-          <p className="uppercase tracking-widest text-zinc-500">Wear What You Are</p>
-        </div>
-      </footer>
+      {/* ── SHARED FOOTER ── */}
+      <Footer className="mt-16" />
 
 
 
