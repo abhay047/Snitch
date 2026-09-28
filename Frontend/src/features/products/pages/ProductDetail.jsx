@@ -15,6 +15,41 @@ const CURRENCY_SYMBOLS = {
   JPY: '¥',
 }
 
+// Helper to extract attribute object from variant (handles Map and plain Object)
+const getAttributesObject = (attributes) => {
+  if (!attributes) return {}
+  try {
+    if (attributes instanceof Map) {
+      return Object.fromEntries(attributes.entries())
+    }
+    if (typeof attributes === 'object') {
+      return attributes
+    }
+  } catch {
+    return {}
+  }
+  return {}
+}
+
+const getVariantAttribute = (variant, key) => {
+  if (!variant || !variant.attributes) return null
+  const attrs = getAttributesObject(variant.attributes)
+  const matchKey = Object.keys(attrs).find(
+    (k) => k.toLowerCase() === key.toLowerCase()
+  )
+  return matchKey ? attrs[matchKey] : null
+}
+
+const formatVariantLabel = (variant, idx = 0) => {
+  if (!variant) return `Variant ${idx + 1}`
+  const attrs = getAttributesObject(variant.attributes)
+  const entries = Object.entries(attrs)
+  if (entries.length > 0) {
+    return entries.map(([k, val]) => `${k.toUpperCase()}: ${val}`).join(' • ')
+  }
+  return `Edition ${idx + 1}`
+}
+
 const ProductDetail = () => {
   const { productId } = useParams()
   const navigate = useNavigate()
@@ -135,10 +170,22 @@ const ProductDetail = () => {
             setProduct(data)
             setActiveImageIndex(0)
 
-            setSelectedSize(null)
-            setSelectedColor(null)
-            setSelectedVariantId(null)
-            setSelectedAttributes({})
+            // Auto-select default variant (variants[0]) by default if present
+            const defaultVar = data.variants && data.variants.length > 0 ? data.variants[0] : null
+            if (defaultVar) {
+              setSelectedVariantId(defaultVar._id)
+              const attrs = getAttributesObject(defaultVar.attributes)
+              const defColor = attrs.color || attrs.colour || data.color || null
+              const defSize = attrs.size || null
+              setSelectedColor(defColor)
+              setSelectedSize(defSize)
+              setSelectedAttributes(attrs)
+            } else {
+              setSelectedSize(null)
+              setSelectedColor(null)
+              setSelectedVariantId(null)
+              setSelectedAttributes({})
+            }
           } else {
             setError('Product not found in catalogue.')
           }
@@ -164,31 +211,6 @@ const ProductDetail = () => {
       isMounted = false
     }
   }, [productId])
-
-  // Helper to extract attribute object from variant (handles Map and plain Object)
-  const getAttributesObject = (attributes) => {
-    if (!attributes) return {}
-    try {
-      if (attributes instanceof Map) {
-        return Object.fromEntries(attributes.entries())
-      }
-      if (typeof attributes === 'object') {
-        return attributes
-      }
-    } catch {
-      return {}
-    }
-    return {}
-  }
-
-  const getVariantAttribute = (variant, key) => {
-    if (!variant || !variant.attributes) return null
-    const attrs = getAttributesObject(variant.attributes)
-    const matchKey = Object.keys(attrs).find(
-      (k) => k.toLowerCase() === key.toLowerCase()
-    )
-    return matchKey ? attrs[matchKey] : null
-  }
 
   // Derive variants info, dynamic attributes, stock, active variant
   const {
@@ -358,43 +380,39 @@ const ProductDetail = () => {
     const isColorSelected = !isColorRequired || Boolean(selectedColor)
     const isSelectionComplete = isSizeSelected && isColorSelected
 
-    // Active variant matching strictly when selection requirements are met
+    // Active variant resolution: prioritize explicitly selected variant ID
     let activeVar = null
-    if (isSelectionComplete) {
-      if (selectedVariantId) {
-        const candidate = variants.find((v) => v._id === selectedVariantId)
-        if (candidate) {
-          if (hasColor && selectedColor) {
-            const c = getVariantAttribute(candidate, 'color') || getVariantAttribute(candidate, 'colour')
-            if (c && String(c).trim().toLowerCase() === String(selectedColor).trim().toLowerCase()) {
-              activeVar = candidate
-            }
-          } else {
-            activeVar = candidate
-          }
-        }
-      }
-      if (!activeVar) {
-        activeVar = activeColorVariants.find((v) => {
-          if (hasSize && selectedSize) {
-            const s = getVariantAttribute(v, 'size')
-            if (s && String(s).trim().toUpperCase() !== selectedSize.toUpperCase()) return false
-          }
-          for (const grp of otherGroups) {
-            const selVal = selectedAttributes[grp.key]
-            if (selVal) {
-              const vVal = getVariantAttribute(v, grp.key)
-              if (vVal && String(vVal).toLowerCase() !== String(selVal).toLowerCase()) return false
-            }
-          }
-          return true
-        }) || null
-      }
+    if (selectedVariantId) {
+      activeVar = variants.find((v) => v._id === selectedVariantId) || null
     }
 
+    if (!activeVar && isSelectionComplete) {
+      activeVar = activeColorVariants.find((v) => {
+        if (hasSize && selectedSize) {
+          const s = getVariantAttribute(v, 'size')
+          if (s && String(s).trim().toUpperCase() !== selectedSize.toUpperCase()) return false
+        }
+        for (const grp of otherGroups) {
+          const selVal = selectedAttributes[grp.key]
+          if (selVal) {
+            const vVal = getVariantAttribute(v, grp.key)
+            if (vVal && String(vVal).toLowerCase() !== String(selVal).toLowerCase()) return false
+          }
+        }
+        return true
+      }) || null
+    }
+
+    // Fallback to default variant (variants[0]) if none resolved
+    if (!activeVar && variants.length > 0) {
+      activeVar = variants[0]
+    }
+
+    const effectiveSelectionComplete = Boolean(activeVar) || isSelectionComplete
+
     let curStock = 0
-    if (isSelectionComplete) {
-      curStock = activeVar ? Math.max(0, Number(activeVar.stock) || 0) : 0
+    if (activeVar) {
+      curStock = Math.max(0, Number(activeVar.stock) || 0)
     } else if (selectedColor && hasColor) {
       curStock = selectedColorStock ?? 0
     } else {
@@ -410,13 +428,31 @@ const ProductDetail = () => {
       hasColorAttribute: hasColor,
       isSizeRequired,
       isColorRequired,
-      isSelectionComplete,
+      isSelectionComplete: effectiveSelectionComplete,
       selectedVariant: activeVar,
       currentStock: curStock,
       totalStock: total,
       hasRealVariants: true,
     }
   }, [product, selectedVariantId, selectedSize, selectedColor, selectedAttributes])
+
+  // Explicitly select a variant (e.g. from Available Variations grid)
+  const handleSelectVariant = (variant) => {
+    if (!variant) return
+    setSelectedVariantId(variant._id)
+    const attrs = getAttributesObject(variant.attributes)
+    const vColor = attrs.color || attrs.colour || getVariantAttribute(variant, 'color') || getVariantAttribute(variant, 'colour')
+    const vSize = attrs.size || getVariantAttribute(variant, 'size')
+    if (vColor) setSelectedColor(vColor)
+    if (vSize) setSelectedSize(vSize)
+    setSelectedAttributes(attrs)
+
+    const varStock = Math.max(0, Number(variant.stock) || 0)
+    if (varStock > 0 && quantity > varStock) {
+      setQuantity(1)
+    }
+    setActiveImageIndex(0)
+  }
 
   const handleSelectSize = (sizeItem) => {
     setSelectedSize(sizeItem.size)
@@ -432,6 +468,7 @@ const ProductDetail = () => {
 
     if (matched) {
       setSelectedVariantId(matched._id)
+      setSelectedAttributes(getAttributesObject(matched.attributes))
       const varStock = Math.max(0, Number(matched.stock) || 0)
       if (varStock > 0 && quantity > varStock) {
         setQuantity(1)
@@ -460,10 +497,9 @@ const ProductDetail = () => {
       const singleSize = getVariantAttribute(singleVar, 'size')
       if (singleSize) {
         setSelectedSize(singleSize)
-      } else {
-        setSelectedSize(null)
       }
       setSelectedVariantId(singleVar._id)
+      setSelectedAttributes(getAttributesObject(singleVar.attributes))
       const varStock = Math.max(0, Number(singleVar.stock) || 0)
       if (varStock > 0 && quantity > varStock) {
         setQuantity(1)
@@ -476,30 +512,38 @@ const ProductDetail = () => {
       })
       if (matched) {
         setSelectedVariantId(matched._id)
+        setSelectedAttributes(getAttributesObject(matched.attributes))
         const varStock = Math.max(0, Number(matched.stock) || 0)
         if (varStock > 0 && quantity > varStock) {
           setQuantity(1)
         }
       }
     } else if (selectedSize) {
-      // If a size was already selected by the user, check if that size is available in this new color
+      // If a size was already selected, check if that size is available in this new color
       const matched = variantsForColor.find((v) => {
         const s = getVariantAttribute(v, 'size')
         return s && String(s).trim().toUpperCase() === selectedSize.toUpperCase()
       })
       if (matched) {
         setSelectedVariantId(matched._id)
+        setSelectedAttributes(getAttributesObject(matched.attributes))
         const varStock = Math.max(0, Number(matched.stock) || 0)
         if (varStock > 0 && quantity > varStock) {
           setQuantity(1)
         }
-      } else {
-        // Current size is not available in the newly selected color; reset size selection
-        setSelectedSize(null)
-        setSelectedVariantId(null)
+      } else if (variantsForColor.length > 0) {
+        const firstVar = variantsForColor[0]
+        const firstSize = getVariantAttribute(firstVar, 'size')
+        setSelectedSize(firstSize || null)
+        setSelectedVariantId(firstVar._id)
+        setSelectedAttributes(getAttributesObject(firstVar.attributes))
       }
-    } else {
-      setSelectedVariantId(null)
+    } else if (variantsForColor.length > 0) {
+      const firstVar = variantsForColor[0]
+      const firstSize = getVariantAttribute(firstVar, 'size')
+      setSelectedSize(firstSize || null)
+      setSelectedVariantId(firstVar._id)
+      setSelectedAttributes(getAttributesObject(firstVar.attributes))
     }
   }
 
@@ -638,15 +682,30 @@ const ProductDetail = () => {
     return `${symbol}${amount}`
   }
 
-  const activePriceObj = selectedVariant?.price?.amount
+  const activePriceObj = selectedVariant?.price?.amount != null
     ? selectedVariant.price
+    : product?.variants?.[0]?.price?.amount != null
+    ? product.variants[0].price
     : product?.price
 
-  // Dynamic gallery images: strictly governed by selectedColor (does NOT change when clicking sizes)
+  // Dynamic gallery images: prioritizes active variant images, then color variant, then default variant / product images
   const activeImages = useMemo(() => {
     if (!product) return []
 
-    // 1. If color is selected, find images corresponding to this color across variants
+    // 1. If active variant has images, prioritize them!
+    if (selectedVariant?.images && selectedVariant.images.length > 0) {
+      return selectedVariant.images
+    }
+
+    // 2. If selectedVariantId is set, check if that variant in product.variants has images
+    if (selectedVariantId && product.variants && product.variants.length > 0) {
+      const v = product.variants.find((item) => item._id === selectedVariantId)
+      if (v?.images && v.images.length > 0) {
+        return v.images
+      }
+    }
+
+    // 3. If color is selected, find images corresponding to this color across variants
     if (selectedColor && product.variants && product.variants.length > 0) {
       const colorVariantWithImages = product.variants.find((v) => {
         const c = getVariantAttribute(v, 'color') || getVariantAttribute(v, 'colour')
@@ -663,24 +722,29 @@ const ProductDetail = () => {
       }
     }
 
-    // 2. If no color or color variant has no specific images, fallback to product images
+    // 4. Default variant's images
+    if (product.variants?.[0]?.images && product.variants[0].images.length > 0) {
+      return product.variants[0].images
+    }
+
+    // 5. Fallback to product images
     if (product.images && product.images.length > 0) {
       return product.images
     }
 
-    // 3. Fallback to any variant with images
+    // 6. Fallback to any variant with images
     const anyVariantWithImages = product.variants?.find((v) => v.images && v.images.length > 0)
     if (anyVariantWithImages?.images && anyVariantWithImages.images.length > 0) {
       return anyVariantWithImages.images
     }
 
     return []
-  }, [product, selectedColor])
+  }, [product, selectedVariant, selectedVariantId, selectedColor])
 
-  // Reset gallery active index to 0 ONLY when selected color or product changes (NOT when size changes)
+  // Reset gallery active index to 0 when selected variant, color, or product changes
   useEffect(() => {
     setActiveImageIndex(0)
-  }, [selectedColor, productId])
+  }, [selectedVariantId, selectedColor, productId])
 
   const getDisplayImageUrl = (img) => {
     if (!img) return null
@@ -1164,7 +1228,7 @@ const ProductDetail = () => {
                 <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md border border-zinc-800 px-3 py-1.5 rounded-sm flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-zinc-300 text-[10px] font-bold tracking-[0.25em] uppercase">
-                    {selectedColor ? `${selectedColor} Edition (${activeImages.length})` : 'Authentic Release'}
+                    {variantDisplayLabel || selectedColor ? `${variantDisplayLabel || selectedColor} Edition (${activeImages.length})` : 'Authentic Release'}
                   </span>
                 </div>
               </div>

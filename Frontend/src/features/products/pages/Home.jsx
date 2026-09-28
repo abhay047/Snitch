@@ -248,9 +248,17 @@ const Home = () => {
     if (sortBy === 'newest' || sortBy === 'in-stock' || sortBy === 'include-out-of-stock') {
       list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     } else if (sortBy === 'price-low') {
-      list.sort((a, b) => (a.price?.amount || 0) - (b.price?.amount || 0))
+      list.sort((a, b) => {
+        const priceA = a.variants?.[0]?.price?.amount ?? a.price?.amount ?? 0
+        const priceB = b.variants?.[0]?.price?.amount ?? b.price?.amount ?? 0
+        return priceA - priceB
+      })
     } else if (sortBy === 'price-high') {
-      list.sort((a, b) => (b.price?.amount || 0) - (a.price?.amount || 0))
+      list.sort((a, b) => {
+        const priceA = a.variants?.[0]?.price?.amount ?? a.price?.amount ?? 0
+        const priceB = b.variants?.[0]?.price?.amount ?? b.price?.amount ?? 0
+        return priceB - priceA
+      })
     } else if (sortBy === 'title') {
       list.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
     }
@@ -266,8 +274,13 @@ const Home = () => {
   }
 
   const getProductImage = (product, index = 0) => {
-    if (!product?.images || product.images.length === 0) return null
-    const item = product.images[index]
+    // Priority: Default variant (variants[0]) images
+    const defaultVariant = product?.variants && product.variants.length > 0 ? product.variants[0] : null
+    const imgs = (defaultVariant?.images && defaultVariant.images.length > 0)
+      ? defaultVariant.images
+      : (product?.images || [])
+    if (imgs.length === 0) return null
+    const item = imgs[index] || imgs[0]
     if (typeof item === 'string') return item
     return item?.url || null
   }
@@ -759,8 +772,13 @@ const Home = () => {
         {!loading && !error && filteredProducts.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8">
             {filteredProducts.map((product) => {
+              const defaultVariant = product.variants && product.variants.length > 0 ? product.variants[0] : null
               const primaryImg = getProductImage(product, 0)
-              const imageCount = product.images?.length || 0
+              const defaultImages = (defaultVariant?.images && defaultVariant.images.length > 0)
+                ? defaultVariant.images
+                : (product.images || [])
+              const imageCount = defaultImages.length
+              const displayPrice = defaultVariant?.price?.amount != null ? defaultVariant.price : product.price
               const totalStock = getProductStock(product)
               const isSoldOut = totalStock <= 0
               const sellerId = product.seller?._id ? String(product.seller._id) : String(product.seller)
@@ -838,9 +856,16 @@ const Home = () => {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-zinc-900 flex items-center justify-between">
-                      <span className="text-yellow-400 font-bold text-sm">
-                        {formatPrice(product.price)}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-yellow-400 font-bold text-sm">
+                          {formatPrice(displayPrice)}
+                        </span>
+                        {product.variants && product.variants.length > 1 && (
+                          <span className="text-zinc-500 text-[9px] uppercase font-mono tracking-wider mt-0.5">
+                            {product.variants.length} variations
+                          </span>
+                        )}
+                      </div>
                       {isSoldOut ? (
                         <span className="text-red-400 font-bold text-[10px] tracking-widest uppercase flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-400" />

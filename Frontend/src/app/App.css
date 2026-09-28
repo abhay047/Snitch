@@ -24,3 +24,78 @@ body::-webkit-scrollbar {
   width: 0px;
   height: 0px;
 }
+
+/* ── LUXURY PRELOADER KEYFRAMES ── */
+@keyframes luxuryTextShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.luxury-text-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.95) 25%,
+    #fde047 50%,
+    rgba(255, 255, 255, 0.95) 75%,
+    rgba(255, 255, 255, 0.45) 100%
+  );
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: luxuryTextShimmer 3.2s ease-in-out infinite;
+}
+
+@keyframes luxuryGlow {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.08);
+  }
+}
+
+.luxury-ambient-glow {
+  animation: luxuryGlow 4s ease-in-out infinite;
+}
+
+@keyframes luxuryLetterRise {
+  0% {
+    transform: translateY(115%);
+    opacity: 0;
+    filter: blur(4px);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+.letter-reveal {
+  display: inline-block;
+  animation: luxuryLetterRise 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.luxury-gold-shimmer {
+  background: linear-gradient(
+    110deg,
+    #a1a1aa 0%,
+    #ffffff 25%,
+    #facc15 50%,
+    #ffffff 75%,
+    #a1a1aa 100%
+  );
+  background-size: 250% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: luxuryTextShimmer 3.5s ease-in-out infinite;
+}
