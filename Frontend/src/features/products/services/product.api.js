@@ -47,6 +47,11 @@ export async function deleteVariant(productId, variantId) {
     return response.data
 }
 
+export async function updateProductVariant(productId, variantId, variantData) {
+    const response = await productApiInstance.patch(`/${productId}/variants/${variantId}`, variantData)
+    return response.data
+}
+
 export async function addVariantImages(productId, variantId, formData) {
     const response = await productApiInstance.post(`/${productId}/variants/${variantId}/images`, formData)
     return response.data

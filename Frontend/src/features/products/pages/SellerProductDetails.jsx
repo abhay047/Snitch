@@ -56,6 +56,7 @@ const SellerProductDetails = () => {
     handleDeleteProduct,
     handleCreateVariant,
     handleUpdateVariantStock,
+    handleUpdateVariant,
     handleDeleteVariant,
     handleAddVariantImages,
   } = useProduct()
@@ -107,15 +108,6 @@ const SellerProductDetails = () => {
   const [editNewPreviews, setEditNewPreviews] = useState([])
   const editFileInputRef = useRef(null)
 
-  // Clean up object URLs on unmount
-  useEffect(() => {
-    return () => {
-      editNewPreviews.forEach((p) => {
-        if (p?.url) URL.revokeObjectURL(p.url)
-      })
-    }
-  }, [editNewPreviews])
-
   // ── DELETE DROP CONFIRMATION MODAL STATE ──
   const [isDeleteDropModalOpen, setIsDeleteDropModalOpen] = useState(false)
   const [isDeletingProduct, setIsDeletingProduct] = useState(false)
@@ -146,6 +138,31 @@ const SellerProductDetails = () => {
 
   // ── MODAL TO CONFIRM VARIANT DELETION ──
   const [deleteModalVariant, setDeleteModalVariant] = useState(null)
+
+  // ── MODAL TO EDIT EXISTING VARIANT FULLY ──
+  const [editingVariant, setEditingVariant] = useState(null)
+  const [editVariantAttributes, setEditVariantAttributes] = useState([])
+  const [editVariantStock, setEditVariantStock] = useState('')
+  const [editVariantPriceAmount, setEditVariantPriceAmount] = useState('')
+  const [editVariantPriceCurrency, setEditVariantPriceCurrency] = useState('INR')
+  const [editVariantExistingImages, setEditVariantExistingImages] = useState([])
+  const [editVariantNewFiles, setEditVariantNewFiles] = useState([])
+  const [editVariantNewPreviews, setEditVariantNewPreviews] = useState([])
+  const [isSavingVariantEdit, setIsSavingVariantEdit] = useState(false)
+  const [editVariantError, setEditVariantError] = useState(null)
+  const editVariantFileInputRef = useRef(null)
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      editNewPreviews.forEach((p) => {
+        if (p?.url) URL.revokeObjectURL(p.url)
+      })
+      editVariantNewPreviews.forEach((p) => {
+        if (p?.url) URL.revokeObjectURL(p.url)
+      })
+    }
+  }, [editNewPreviews, editVariantNewPreviews])
 
   const thumbnailContainerRef = useRef(null)
 
@@ -686,6 +703,7 @@ const SellerProductDetails = () => {
     const currentStock = Number(currentVariant.stock) || 0
     const newStock = Math.max(0, currentStock + delta)
 
+    const isDefault = product?.variants?.[0]?._id === variantId
     setVariantActionLoading(variantId)
     try {
       const updatedProduct = await handleUpdateVariantStock(product._id, variantId, newStock)
@@ -695,6 +713,7 @@ const SellerProductDetails = () => {
         // Optimistic fallback
         setProduct((prev) => ({
           ...prev,
+          ...(isDefault && { stock: newStock }),
           variants: prev.variants.map((v) =>
             v._id === variantId ? { ...v, stock: newStock } : v
           ),
@@ -713,6 +732,7 @@ const SellerProductDetails = () => {
     const rawVal = stockInputs[variantId]
     const targetStock = Math.max(0, Number(rawVal) || 0)
 
+    const isDefault = product?.variants?.[0]?._id === variantId
     setVariantActionLoading(variantId)
     try {
       const updatedProduct = await handleUpdateVariantStock(product._id, variantId, targetStock)
@@ -722,6 +742,7 @@ const SellerProductDetails = () => {
         // Optimistic fallback
         setProduct((prev) => ({
           ...prev,
+          ...(isDefault && { stock: targetStock }),
           variants: prev.variants.map((v) =>
             v._id === variantId ? { ...v, stock: targetStock } : v
           ),
@@ -733,6 +754,219 @@ const SellerProductDetails = () => {
       showToast(err.response?.data?.message || 'Failed to save stock.')
     } finally {
       setVariantActionLoading(null)
+    }
+  }
+
+  // ── EDIT EXISTING VARIANT HANDLERS ──
+  const handleOpenEditVariantModal = (variant) => {
+    setEditingVariant(variant)
+    setEditVariantError(null)
+
+    const attrs = getAttributesObject(variant.attributes)
+    const entries = Object.entries(attrs)
+    if (entries.length > 0) {
+      setEditVariantAttributes(
+        entries.map(([k, v], idx) => ({
+          id: `edit_attr_${idx}_${Date.now()}`,
+          key: k,
+          value: String(v),
+        }))
+      )
+    } else {
+      setEditVariantAttributes([
+        { id: `edit_attr_1_${Date.now()}`, key: 'size', value: 'M' },
+      ])
+    }
+
+    setEditVariantStock(variant.stock != null ? String(variant.stock) : '0')
+    setEditVariantPriceAmount(
+      variant.price?.amount != null
+        ? String(variant.price.amount)
+        : String(product?.price?.amount || '')
+    )
+    setEditVariantPriceCurrency(
+      variant.price?.currency || product?.price?.currency || 'INR'
+    )
+
+    // Existing images
+    const currentImgs = (variant.images || []).map((img) => ({
+      url: typeof img === 'string' ? img : img.url,
+    }))
+    setEditVariantExistingImages(currentImgs)
+
+    // Clean up previous files & previews
+    editVariantNewPreviews.forEach((p) => {
+      if (p?.url) URL.revokeObjectURL(p.url)
+    })
+    setEditVariantNewFiles([])
+    setEditVariantNewPreviews([])
+  }
+
+  const handleCloseEditVariantModal = () => {
+    if (isSavingVariantEdit) return
+    editVariantNewPreviews.forEach((p) => {
+      if (p?.url) URL.revokeObjectURL(p.url)
+    })
+    setEditVariantNewFiles([])
+    setEditVariantNewPreviews([])
+    setEditingVariant(null)
+    setEditVariantError(null)
+  }
+
+  const handleAddEditVariantAttribute = (key = '', value = '') => {
+    const newId = 'edit_attr_' + Date.now() + Math.random().toString(36).substr(2, 4)
+    setEditVariantAttributes((prev) => [...prev, { id: newId, key, value }])
+  }
+
+  const handleRemoveEditVariantAttribute = (id) => {
+    setEditVariantAttributes((prev) => {
+      const filtered = prev.filter((a) => a.id !== id)
+      if (filtered.length === 0) {
+        return [{ id: 'edit_attr_' + Date.now(), key: '', value: '' }]
+      }
+      return filtered
+    })
+  }
+
+  const handleUpdateEditVariantAttribute = (id, field, val) => {
+    setEditVariantAttributes((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, [field]: val } : a))
+    )
+  }
+
+  const handleApplyEditPreset = (presetKey, presetValue = '') => {
+    setEditVariantAttributes((prev) => {
+      const existing = prev.find((a) => a.key.toLowerCase() === presetKey.toLowerCase())
+      if (existing) {
+        return prev.map((a) =>
+          a.id === existing.id ? { ...a, value: presetValue || a.value } : a
+        )
+      }
+      const newId = 'edit_attr_' + Date.now() + Math.random().toString(36).substr(2, 4)
+      return [...prev, { id: newId, key: presetKey, value: presetValue }]
+    })
+  }
+
+  const handleRemoveExistingVariantImage = (index) => {
+    setEditVariantExistingImages((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleEditVariantFileChange = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    setEditVariantNewFiles((prev) => [...prev, ...files])
+    const newPreviews = files.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+    }))
+    setEditVariantNewPreviews((prev) => [...prev, ...newPreviews])
+    e.target.value = ''
+  }
+
+  const handleRemoveEditVariantNewFile = (idx) => {
+    setEditVariantNewFiles((prev) => prev.filter((_, i) => i !== idx))
+    setEditVariantNewPreviews((prev) => {
+      const removed = prev[idx]
+      if (removed?.url) URL.revokeObjectURL(removed.url)
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
+  const handleSaveVariantEditSubmit = async (e) => {
+    e.preventDefault()
+    if (!editingVariant) return
+
+    // Clean attributes
+    const cleanAttrs = {}
+    editVariantAttributes.forEach((attr) => {
+      const k = attr.key?.trim().toLowerCase()
+      const v = attr.value?.trim()
+      if (k && v) {
+        cleanAttrs[k] = v
+      }
+    })
+
+    if (Object.keys(cleanAttrs).length === 0) {
+      setEditVariantError('Please specify at least one valid attribute (e.g. size, color).')
+      return
+    }
+
+    if (editVariantPriceAmount !== '' && (isNaN(Number(editVariantPriceAmount)) || Number(editVariantPriceAmount) < 0)) {
+      setEditVariantError('Price must be a valid non-negative number.')
+      return
+    }
+
+    if (isNaN(Number(editVariantStock)) || Number(editVariantStock) < 0) {
+      setEditVariantError('Stock must be a valid non-negative integer.')
+      return
+    }
+
+    setIsSavingVariantEdit(true)
+    setEditVariantError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('stock', Math.max(0, parseInt(editVariantStock, 10) || 0))
+      formData.append('attributes', JSON.stringify(cleanAttrs))
+      formData.append(
+        'price',
+        JSON.stringify({
+          amount: editVariantPriceAmount !== '' ? Number(editVariantPriceAmount) : product.price.amount,
+          currency: editVariantPriceCurrency || product.price?.currency || 'INR',
+        })
+      )
+      formData.append('existingImages', JSON.stringify(editVariantExistingImages))
+      editVariantNewFiles.forEach((file) => {
+        formData.append('images', file)
+      })
+
+      const isDefault = product?.variants?.[0]?._id === editingVariant._id
+      const updatedProduct = await handleUpdateVariant(product._id, editingVariant._id, formData)
+      if (updatedProduct) {
+        setProduct(updatedProduct)
+      } else {
+        // Fallback optimistic update
+        const updatedImages = [
+          ...editVariantExistingImages,
+          ...editVariantNewPreviews.map((p) => ({ url: p.url })),
+        ]
+        const updatedStock = Math.max(0, parseInt(editVariantStock, 10) || 0)
+        const updatedPrice = {
+          amount: editVariantPriceAmount !== '' ? Number(editVariantPriceAmount) : product.price.amount,
+          currency: editVariantPriceCurrency || product.price?.currency || 'INR',
+        }
+
+        setProduct((prev) => ({
+          ...prev,
+          ...(isDefault && {
+            price: updatedPrice,
+            stock: updatedStock,
+            ...(cleanAttrs.color && { color: cleanAttrs.color }),
+            ...(updatedImages.length > 0 && { images: updatedImages }),
+          }),
+          variants: prev.variants.map((v) =>
+            v._id === editingVariant._id
+              ? {
+                  ...v,
+                  attributes: cleanAttrs,
+                  stock: updatedStock,
+                  price: updatedPrice,
+                  images: updatedImages,
+                }
+              : v
+          ),
+        }))
+      }
+
+      showToast(isDefault ? 'Default variant & main drop specifications updated!' : 'Variant updated successfully!')
+      handleCloseEditVariantModal()
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to update variant.'
+      setEditVariantError(msg)
+      showToast(msg)
+    } finally {
+      setIsSavingVariantEdit(false)
     }
   }
 
@@ -1827,9 +2061,16 @@ const SellerProductDetails = () => {
                               {getVariantPrimaryBadge(v, idx)}
                             </span>
                             <div className="min-w-0">
-                              <h4 className="text-white font-bold text-sm tracking-wide uppercase truncate">
-                                {variantLabel}
-                              </h4>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="text-white font-bold text-sm tracking-wide uppercase truncate">
+                                  {variantLabel}
+                                </h4>
+                                {idx === 0 && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-yellow-400/10 border border-yellow-400/40 text-yellow-400 text-[9px] font-black tracking-wider uppercase">
+                                    ★ Default Variant
+                                  </span>
+                                )}
+                              </div>
                               {/* Dynamic Attribute Tag Badges */}
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {Object.entries(getAttributesObject(v.attributes)).map(([key, val]) => {
@@ -2013,13 +2254,25 @@ const SellerProductDetails = () => {
                             </button>
                           </div>
 
-                          {/* 6. Clone & Delete Actions */}
+                          {/* 6. Edit, Clone & Delete Actions */}
                           <div className="lg:col-span-1 flex items-center justify-end gap-1">
                             <button
                               type="button"
                               disabled={isRowBusy}
+                              onClick={() => handleOpenEditVariantModal(v)}
+                              className="text-zinc-500 hover:text-yellow-400 p-1.5 transition-colors cursor-pointer disabled:opacity-30 rounded-sm hover:bg-zinc-900"
+                              title={`Edit ${variantLabel} (price, stock, attributes & photos)`}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                              </svg>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isRowBusy}
                               onClick={() => handleCloneVariant(v)}
-                              className="text-zinc-600 hover:text-yellow-400 p-2 transition-colors cursor-pointer disabled:opacity-30"
+                              className="text-zinc-600 hover:text-yellow-400 p-1.5 transition-colors cursor-pointer disabled:opacity-30 rounded-sm hover:bg-zinc-900"
                               title={`Clone ${variantLabel} attributes to create new variation`}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
@@ -2031,7 +2284,7 @@ const SellerProductDetails = () => {
                               type="button"
                               disabled={isRowBusy}
                               onClick={() => handleOpenDeleteVariantModal(v, variantLabel)}
-                              className="text-zinc-600 hover:text-red-400 p-2 transition-colors cursor-pointer disabled:opacity-30"
+                              className="text-zinc-600 hover:text-red-400 p-1.5 transition-colors cursor-pointer disabled:opacity-30 rounded-sm hover:bg-zinc-900"
                               title={`Delete ${variantLabel}`}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
@@ -2319,6 +2572,357 @@ const SellerProductDetails = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: EDIT EXISTING VARIANT (FULL ATTRIBUTES, PRICE, STOCK & IMAGERY) ── */}
+      {editingVariant && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+          onClick={() => !isSavingVariantEdit && handleCloseEditVariantModal()}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-zinc-800 rounded-sm max-w-2xl w-full p-6 sm:p-8 relative shadow-2xl my-8 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top gold accent line */}
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-600" />
+
+            {/* Close Button */}
+            {!isSavingVariantEdit && (
+              <button
+                type="button"
+                onClick={handleCloseEditVariantModal}
+                className="absolute top-5 right-5 text-zinc-500 hover:text-white text-lg w-8 h-8 rounded-sm border border-zinc-800 flex items-center justify-center transition-colors cursor-pointer z-10"
+                title="Cancel"
+              >
+                ✕
+              </button>
+            )}
+
+            {/* Header Icon + Title */}
+            <div className="flex items-center gap-3.5 mb-5 shrink-0">
+              <div className="w-11 h-11 rounded-sm bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center text-yellow-400 shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                </svg>
+              </div>
+              <div>
+                <div className="inline-flex items-center gap-2 mb-0.5">
+                  <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                  <span className="text-yellow-400 text-[10px] tracking-[0.25em] uppercase font-bold">
+                    Seller Studio • Variation Editor
+                  </span>
+                </div>
+                <h3 className="text-white text-xl font-black tracking-tight uppercase">
+                  Edit Garment Variation
+                </h3>
+                <p className="text-zinc-500 text-xs mt-0.5 font-mono">
+                  Target: <span className="text-zinc-300 font-bold font-sans uppercase">{formatVariantAttributes(editingVariant.attributes)}</span>
+                  {editingVariant._id && (
+                    <span className="ml-2 text-zinc-600">#{editingVariant._id.slice(-6).toUpperCase()}</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Default Variant Synchronize Info Banner */}
+            {product?.variants?.[0]?._id === editingVariant?._id && (
+              <div className="mb-4 p-3 bg-yellow-400/10 border border-yellow-400/30 rounded-sm shrink-0 flex items-start gap-2.5">
+                <span className="text-yellow-400 text-sm mt-0.5">★</span>
+                <div>
+                  <span className="text-yellow-400 text-xs font-bold uppercase tracking-wider block">
+                    Default Drop Variant Sync Active
+                  </span>
+                  <p className="text-zinc-400 text-[11px] leading-relaxed mt-0.5">
+                    This is the default drop variant created with the product. Any modifications to its price, color attribute, stock count, or photos will automatically synchronize with the main garment drop specifications.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Error Banner */}
+            {editVariantError && (
+              <div className="mb-4 p-3 bg-red-950/40 border border-red-500/40 text-red-400 text-xs rounded-sm shrink-0 flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{editVariantError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveVariantEditSubmit} className="space-y-5 overflow-y-auto pr-1 flex-1">
+              {/* SECTION 1: SPECIFICATIONS & ATTRIBUTES */}
+              <div className="p-4 bg-zinc-950/60 border border-zinc-900 rounded-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400 text-[10px] uppercase font-bold tracking-wider">
+                    Variant Specifications (e.g. Size, Color, Fit) *
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleAddEditVariantAttribute('', '')}
+                    className="text-[10px] text-yellow-400 hover:text-yellow-300 font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>+ Add Spec</span>
+                  </button>
+                </div>
+
+                {/* Quick Presets Bar */}
+                <div className="flex flex-wrap gap-1.5 pt-1 border-t border-zinc-900">
+                  <span className="text-zinc-600 text-[9px] uppercase font-mono self-center mr-1">Quick Presets:</span>
+                  {['S', 'M', 'L', 'XL', 'XXL'].map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => handleApplyEditPreset('size', sz)}
+                      className="text-[9px] px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 rounded-sm font-mono uppercase transition-colors cursor-pointer"
+                    >
+                      Size {sz}
+                    </button>
+                  ))}
+                  {['Black', 'White', 'Navy', 'Grey'].map((col) => (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => handleApplyEditPreset('color', col)}
+                      className="text-[9px] px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-yellow-400 rounded-sm uppercase transition-colors cursor-pointer"
+                    >
+                      {col}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Dynamic Attributes List */}
+                <div className="space-y-2 pt-2">
+                  {editVariantAttributes.map((attr) => (
+                    <div key={attr.id} className="flex items-center gap-2">
+                      <div className="w-1/3">
+                        <input
+                          type="text"
+                          required
+                          value={attr.key}
+                          onChange={(e) => handleUpdateEditVariantAttribute(attr.id, 'key', e.target.value)}
+                          placeholder="e.g. size, color"
+                          className="w-full bg-zinc-900/90 border border-zinc-800 focus:border-yellow-400 text-white text-xs px-3 py-2 rounded-sm focus:outline-none uppercase font-mono transition-colors"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          required
+                          value={attr.value}
+                          onChange={(e) => handleUpdateEditVariantAttribute(attr.id, 'value', e.target.value)}
+                          placeholder="e.g. XL, Vintage Black"
+                          className="w-full bg-zinc-900/90 border border-zinc-800 focus:border-yellow-400 text-white text-xs px-3 py-2 rounded-sm focus:outline-none uppercase font-medium transition-colors"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEditVariantAttribute(attr.id)}
+                        disabled={editVariantAttributes.length <= 1}
+                        className="p-2 text-zinc-600 hover:text-red-400 transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                        title="Remove specification"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION 2: PRICING & INVENTORY */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Unit Price */}
+                <div>
+                  <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                    Variant Price (Optional Override)
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={editVariantPriceCurrency}
+                      onChange={(e) => setEditVariantPriceCurrency(e.target.value)}
+                      className="bg-zinc-900 border border-zinc-800 text-yellow-400 text-xs px-2.5 py-2.5 rounded-sm focus:outline-none focus:border-yellow-400 font-mono font-bold"
+                    >
+                      <option value="INR">INR (₹)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="GBP">GBP (£)</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={editVariantPriceAmount}
+                      onChange={(e) => setEditVariantPriceAmount(e.target.value)}
+                      placeholder={`Base: ${product?.price?.amount || 0}`}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors font-mono"
+                    />
+                  </div>
+                  <span className="text-[10px] text-zinc-500 mt-1 block">
+                    Product base price: {formatPrice(product?.price)}
+                  </span>
+                </div>
+
+                {/* Stock Level */}
+                <div>
+                  <label className="block text-zinc-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">
+                    Available Stock Level *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="1"
+                    value={editVariantStock}
+                    onChange={(e) => setEditVariantStock(e.target.value)}
+                    placeholder="25"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors font-mono font-bold"
+                  />
+                  {/* Quick stock shortcuts */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-[9px] text-zinc-600 uppercase font-mono">Quick Set:</span>
+                    {[0, 10, 25, 50, 100].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setEditVariantStock(String(num))}
+                        className={`text-[9px] px-1.5 py-0.5 rounded-sm border font-mono transition-colors cursor-pointer ${
+                          Number(editVariantStock) === num
+                            ? 'bg-yellow-400/10 border-yellow-400/40 text-yellow-400'
+                            : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        {num === 0 ? 'Sold Out' : num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: VARIANT IMAGES MANAGER */}
+              <div className="p-4 bg-zinc-950/60 border border-zinc-900 rounded-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400 text-[10px] uppercase font-bold tracking-wider">
+                    Variant Photos & Media
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {editVariantExistingImages.length + editVariantNewFiles.length} photos
+                  </span>
+                </div>
+
+                {/* Current Existing Images */}
+                {editVariantExistingImages.length > 0 && (
+                  <div>
+                    <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-wider block mb-1.5">
+                      Current Photos (Click ✕ to remove):
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {editVariantExistingImages.map((img, idx) => (
+                        <div key={idx} className="relative group w-16 h-20 bg-zinc-900 rounded-sm overflow-hidden border border-zinc-800">
+                          <img
+                            src={img.url}
+                            alt=""
+                            className="w-full h-full object-cover object-top"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveExistingVariantImage(idx)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-red-600/90 hover:bg-red-500 text-white text-[10px] font-bold rounded-sm flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer shadow-sm"
+                            title="Remove this photo from variant"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Newly Added Files Preview */}
+                {editVariantNewPreviews.length > 0 && (
+                  <div>
+                    <span className="text-[9px] text-yellow-400 uppercase font-bold tracking-wider block mb-1.5">
+                      Newly Uploaded Photos ({editVariantNewPreviews.length}):
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {editVariantNewPreviews.map((p, idx) => (
+                        <div key={idx} className="relative group w-16 h-20 bg-zinc-900 rounded-sm overflow-hidden border border-yellow-400/40">
+                          <img
+                            src={p.url}
+                            alt=""
+                            className="w-full h-full object-cover object-top"
+                          />
+                          <span className="absolute bottom-1 left-1 bg-yellow-400 text-zinc-950 text-[8px] font-black uppercase px-1 rounded-sm">
+                            NEW
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditVariantNewFile(idx)}
+                            className="absolute top-1 right-1 w-5 h-5 bg-red-600/90 hover:bg-red-500 text-white text-[10px] font-bold rounded-sm flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer shadow-sm"
+                            title="Remove photo"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* File Upload Zone */}
+                <div>
+                  <input
+                    type="file"
+                    ref={editVariantFileInputRef}
+                    multiple
+                    accept="image/*"
+                    onChange={handleEditVariantFileChange}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => editVariantFileInputRef.current?.click()}
+                    className="w-full py-3 px-4 border border-dashed border-zinc-800 hover:border-yellow-400/60 bg-zinc-900/30 hover:bg-zinc-900/60 rounded-sm text-center text-xs text-zinc-400 hover:text-yellow-400 transition-colors cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wider font-bold"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span>Upload New Variant Photos</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex items-center gap-3 pt-3 border-t border-zinc-900 shrink-0">
+                <button
+                  type="button"
+                  disabled={isSavingVariantEdit}
+                  onClick={handleCloseEditVariantModal}
+                  className="flex-1 border border-zinc-800 hover:border-zinc-700 bg-zinc-950/40 text-zinc-400 hover:text-white py-3 text-xs tracking-wider uppercase rounded-sm transition-all cursor-pointer font-bold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSavingVariantEdit}
+                  className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black py-3 text-xs tracking-[0.15em] uppercase rounded-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-yellow-400/10 active:scale-[0.98] disabled:opacity-50"
+                >
+                  {isSavingVariantEdit ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 animate-spin text-zinc-950" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <span>Save Variant Changes</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

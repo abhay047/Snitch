@@ -195,22 +195,69 @@ const Cart = () => {
     }
   }
 
-  // Helper to extract unit price for an item
-  const getItemUnitPrice = (item) => {
-    if (item.price?.amount != null) return Number(item.price.amount)
+  // Helper to extract live current unit price for an item from product/variant
+  const getCurrentUnitPrice = (item) => {
     const product = typeof item.product === 'object' ? item.product : null
-    const variantId = item.variant ? String(item.variant) : null
+    const variantId = item.variant
+      ? String(typeof item.variant === 'object' ? item.variant._id || item.variant : item.variant)
+      : null
     const matchedVariant = variantId && product?.variants
       ? product.variants.find((v) => String(v._id) === variantId)
       : null
 
     if (matchedVariant?.price?.amount != null) return Number(matchedVariant.price.amount)
     if (product?.price?.amount != null) return Number(product.price.amount)
+    if (item.price?.amount != null) return Number(item.price.amount)
     return 0
   }
 
+  // Helper to extract original price when item was added to the cart
+  const getAddedUnitPrice = (item) => {
+    if (item.price?.amount != null) return Number(item.price.amount)
+    return getCurrentUnitPrice(item)
+  }
+
+  // Live unit price for cart calculation and display
+  const getItemUnitPrice = (item) => {
+    return getCurrentUnitPrice(item)
+  }
+
+  // Price change detection: compares added price vs live current catalog price
+  const getPriceChangeInfo = (item) => {
+    const addedPrice = item.price?.amount != null ? Number(item.price.amount) : null
+    const currentPrice = getCurrentUnitPrice(item)
+
+    if (addedPrice == null || addedPrice === currentPrice) {
+      return {
+        hasChanged: false,
+        type: 'unchanged',
+        diff: 0,
+        currentPrice,
+        addedPrice: currentPrice,
+      }
+    }
+
+    if (currentPrice < addedPrice) {
+      return {
+        hasChanged: true,
+        type: 'dropped',
+        diff: addedPrice - currentPrice,
+        currentPrice,
+        addedPrice,
+      }
+    } else {
+      return {
+        hasChanged: true,
+        type: 'increased',
+        diff: currentPrice - addedPrice,
+        currentPrice,
+        addedPrice,
+      }
+    }
+  }
+
   const getItemCurrency = (item) => {
-    return item.price?.currency || item.product?.price?.currency || 'INR'
+    return item.product?.price?.currency || item.price?.currency || 'INR'
   }
 
   // Handle quantity change with backend persistence and stock check
@@ -274,11 +321,13 @@ const Cart = () => {
     }
   }
 
-  // Calculate Order Totals
-  const { subtotal, totalQuantity, primaryCurrency } = useMemo(() => {
+  // Calculate Order Totals & Price Changes
+  const { subtotal, totalQuantity, primaryCurrency, totalSavings, totalIncrease } = useMemo(() => {
     let sum = 0
     let totalQty = 0
     let currency = 'INR'
+    let savings = 0
+    let increase = 0
 
     cartItems.forEach((item) => {
       const unit = getItemUnitPrice(item)
@@ -286,12 +335,23 @@ const Cart = () => {
       sum += unit * qty
       totalQty += qty
       currency = getItemCurrency(item)
+
+      const priceInfo = getPriceChangeInfo(item)
+      if (priceInfo.hasChanged) {
+        if (priceInfo.type === 'dropped') {
+          savings += priceInfo.diff * qty
+        } else if (priceInfo.type === 'increased') {
+          increase += priceInfo.diff * qty
+        }
+      }
     })
 
     return {
       subtotal: sum,
       totalQuantity: totalQty,
       primaryCurrency: currency,
+      totalSavings: savings,
+      totalIncrease: increase,
     }
   }, [cartItems])
 
@@ -659,6 +719,7 @@ const Cart = () => {
                 const category = product?.category ? `${product.category} Collection` : 'Limited Drop'
                 const itemImg = getItemImage(item)
                 const { size, color, stock, otherAttrs } = getItemVariantDetails(item)
+                const priceInfo = getPriceChangeInfo(item)
                 const unitPrice = getItemUnitPrice(item)
                 const currency = getItemCurrency(item)
                 const qty = Math.max(1, Number(item.quantity) || 1)
@@ -668,7 +729,7 @@ const Cart = () => {
                 return (
                   <div
                     key={item._id || `${productId}-${item.variant || index}`}
-                    className="p-4 sm:p-6 bg-zinc-950/60 border border-zinc-900/90 hover:border-zinc-800 transition-colors rounded-sm flex flex-col sm:flex-row gap-5 sm:gap-6 relative group"
+                    className="p-4 sm:p-6 bg-zinc-950/95 backdrop-blur-md border border-zinc-800/80 hover:border-zinc-700/80 transition-colors rounded-sm flex flex-col sm:flex-row gap-5 sm:gap-6 relative group shadow-xl"
                   >
                     {/* Garment Image Thumbnail */}
                     <Link
@@ -817,14 +878,46 @@ const Cart = () => {
                           )}
                         </div>
 
-                        {/* Item Total Price */}
+                        {/* Item Total Price & Price Change Alert */}
                         <div className="text-right">
                           <span className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider block">
                             Subtotal
                           </span>
-                          <span className="text-white text-lg sm:text-xl font-black font-mono tracking-tight">
-                            {formatPrice(itemTotal, currency)}
-                          </span>
+                          <div className="flex items-baseline justify-end gap-2">
+                            {priceInfo.hasChanged && (
+                              <span className="text-zinc-400 line-through text-xs sm:text-sm font-mono font-medium">
+                                {formatPrice(priceInfo.addedPrice * qty, currency)}
+                              </span>
+                            )}
+                            <span className="text-white text-lg sm:text-xl font-black font-mono tracking-tight">
+                              {formatPrice(itemTotal, currency)}
+                            </span>
+                          </div>
+
+                          {/* Price Change Savings/Increase Indicator */}
+                          {priceInfo.hasChanged && (
+                            <div className="mt-0.5">
+                              {priceInfo.type === 'dropped' ? (
+                                <p className="text-emerald-400 text-xs font-bold tracking-tight">
+                                  You save {formatPrice(priceInfo.diff * qty, currency)}
+                                  {qty > 1 && (
+                                    <span className="text-[10px] text-emerald-400 font-mono font-medium ml-1">
+                                      ({formatPrice(priceInfo.diff, currency)}/ea)
+                                    </span>
+                                  )}
+                                </p>
+                              ) : (
+                                <p className="text-red-400 text-xs font-bold tracking-tight">
+                                  Price increased by {formatPrice(priceInfo.diff * qty, currency)}
+                                  {qty > 1 && (
+                                    <span className="text-[10px] text-red-400 font-mono font-medium ml-1">
+                                      (+{formatPrice(priceInfo.diff, currency)}/ea)
+                                    </span>
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -833,7 +926,7 @@ const Cart = () => {
               })}
 
               {/* Complimentary Delivery Perks Banner */}
-              <div className="p-4 bg-zinc-900/30 border border-zinc-900 rounded-sm flex items-center justify-between text-xs text-zinc-400 mt-6">
+              <div className="p-4 bg-zinc-900/50 border border-zinc-800/80 rounded-sm flex items-center justify-between text-xs text-zinc-400 mt-6">
                 <div className="flex items-center gap-2.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span>Complimentary Express Delivery activated for this drop.</span>
@@ -846,7 +939,7 @@ const Cart = () => {
 
             {/* ── RIGHT COLUMN: ORDER SUMMARY (4 COLS - STICKY) ── */}
             <div className="lg:col-span-4 sticky top-28 space-y-6">
-              <div className="p-6 bg-zinc-950/80 border border-zinc-800 rounded-sm shadow-2xl relative overflow-hidden">
+              <div className="p-6 bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-sm shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/5 rounded-full blur-2xl pointer-events-none" />
 
                 <div className="flex items-center justify-between pb-4 border-b border-zinc-900 mb-5">
@@ -866,6 +959,18 @@ const Cart = () => {
                       {formatPrice(subtotal, primaryCurrency)}
                     </span>
                   </div>
+
+                  {totalSavings > 0 && (
+                    <div className="flex items-center justify-between text-emerald-400">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Price Drop Savings</span>
+                      </span>
+                      <span className="font-mono font-bold">
+                        -{formatPrice(totalSavings, primaryCurrency)}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
