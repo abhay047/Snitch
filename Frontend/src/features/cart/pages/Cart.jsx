@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
+import { useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router'
 import { useCart } from '../hook/useCart'
 import { useAuth } from '../../auth/hook/useAuth'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
 import ClearBagConfirmModal from '../components/ClearBagConfirmModal.jsx'
 import Footer from '../../Shared/Components/Footer.jsx'
-import { setItems } from '../state/cart.slice'
 
 const CURRENCY_SYMBOLS = {
   INR: '₹',
@@ -39,7 +38,6 @@ const formatPrice = (amount, currency = 'INR') => {
 }
 
 const Cart = () => {
-  const dispatch = useDispatch()
   const navigate = useNavigate()
   const cartItems = useSelector((state) => state.cart?.items) || []
   const user = useSelector((state) => state.auth?.user)
@@ -81,21 +79,6 @@ const Cart = () => {
   // User Profile Dropdown state in Header
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
   const userDropdownRef = useRef(null)
-
-  // Checkout Modal State
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
-  const [orderPlaced, setOrderPlaced] = useState(false)
-  const [placedOrderId, setPlacedOrderId] = useState(null)
-  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
-  const [checkoutForm, setCheckoutForm] = useState({
-    fullname: user?.fullname || '',
-    phone: '',
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-    paymentMethod: 'upi',
-  })
 
   // Close user dropdown on outside click
   useEffect(() => {
@@ -144,13 +127,6 @@ const Cart = () => {
       isMounted = false
     }
   }, [])
-
-  // Update checkout form when user data loads
-  useEffect(() => {
-    if (user?.fullname && !checkoutForm.fullname) {
-      setCheckoutForm((prev) => ({ ...prev, fullname: user.fullname }))
-    }
-  }, [user])
 
   // Helper to resolve product image from item
   const getItemImage = (item) => {
@@ -332,25 +308,6 @@ const Cart = () => {
     if (subtotal <= 0) return 0
     return subtotal + gstAmount + handlingFee
   }, [subtotal, gstAmount, handlingFee])
-
-  // Handle Checkout Order Submission
-  const handlePlaceOrder = (e) => {
-    e.preventDefault()
-    if (!checkoutForm.fullname || !checkoutForm.phone || !checkoutForm.address || !checkoutForm.pincode) {
-      alert('Please fill out all required shipping address fields.')
-      return
-    }
-
-    setIsSubmittingOrder(true)
-    setTimeout(() => {
-      const generatedId = `SN-${Math.floor(100000 + Math.random() * 900000)}`
-      setPlacedOrderId(generatedId)
-      setOrderPlaced(true)
-      setIsSubmittingOrder(false)
-      dispatch(setItems([]))
-      showToast('Order confirmed successfully!')
-    }, 1200)
-  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 relative font-sans selection:bg-yellow-400 selection:text-zinc-950 flex flex-col">
@@ -957,10 +914,9 @@ const Cart = () => {
                     </span>
                   </div>
 
-                  {/* Main Checkout Button */}
+                  {/* Main Checkout Button (Non-functional as requested) */}
                   <button
                     type="button"
-                    onClick={() => setIsCheckoutOpen(true)}
                     className="w-full mt-6 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black py-4 px-6 text-xs sm:text-sm tracking-[0.25em] uppercase rounded-sm transition-all duration-200 cursor-pointer shadow-xl shadow-yellow-400/10 flex items-center justify-center gap-2.5 active:scale-[0.99] group"
                   >
                     <svg className="w-4 h-4 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -994,211 +950,6 @@ const Cart = () => {
           </div>
         )}
       </main>
-
-      {/* ── CHECKOUT MODAL ── */}
-      {isCheckoutOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-[#0e0e0e] border border-zinc-800 rounded-sm max-w-lg w-full p-6 sm:p-8 shadow-2xl relative my-8">
-            <button
-              type="button"
-              onClick={() => {
-                setIsCheckoutOpen(false)
-                setOrderPlaced(false)
-              }}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-white p-1 transition-colors cursor-pointer"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {!orderPlaced ? (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                  <span className="text-yellow-400 text-[10px] tracking-[0.3em] uppercase font-bold">
-                    Fast Checkout
-                  </span>
-                </div>
-                <h3 className="text-white text-xl sm:text-2xl font-black uppercase tracking-tight mb-6">
-                  Complete Your Order
-                </h3>
-
-                <form onSubmit={handlePlaceOrder} className="space-y-4">
-                  <div>
-                    <label className="block text-zinc-400 text-[10px] uppercase tracking-wider font-bold mb-1.5">
-                      Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={checkoutForm.fullname}
-                      onChange={(e) => setCheckoutForm({ ...checkoutForm, fullname: e.target.value })}
-                      placeholder="Receiver's full name"
-                      className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-400 text-[10px] uppercase tracking-wider font-bold mb-1.5">
-                      Phone Number *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={checkoutForm.phone}
-                      onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                      placeholder="10-digit mobile number"
-                      className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-400 text-[10px] uppercase tracking-wider font-bold mb-1.5">
-                      Shipping Address *
-                    </label>
-                    <textarea
-                      required
-                      rows={2}
-                      value={checkoutForm.address}
-                      onChange={(e) => setCheckoutForm({ ...checkoutForm, address: e.target.value })}
-                      placeholder="House/Flat number, Street, Landmark"
-                      className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors resize-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-zinc-400 text-[10px] uppercase tracking-wider font-bold mb-1.5">
-                        City *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={checkoutForm.city}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, city: e.target.value })}
-                        placeholder="e.g. Mumbai"
-                        className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-zinc-400 text-[10px] uppercase tracking-wider font-bold mb-1.5">
-                        PIN Code *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={checkoutForm.pincode}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, pincode: e.target.value })}
-                        placeholder="6-digit PIN"
-                        className="w-full bg-zinc-900/80 border border-zinc-800 rounded-sm px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-yellow-400 transition-colors font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Payment Method Selector */}
-                  <div className="pt-2">
-                    <label className="block text-zinc-400 text-[10px] uppercase tracking-wider font-bold mb-2">
-                      Payment Mode
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {[
-                        { id: 'upi', label: 'UPI / QR' },
-                        { id: 'card', label: 'Card Payment' },
-                        { id: 'cod', label: 'Cash on Delivery' },
-                        { id: 'netbanking', label: 'Net Banking' },
-                      ].map((pm) => (
-                        <label
-                          key={pm.id}
-                          className={`flex items-center gap-2 p-2.5 rounded-sm border cursor-pointer transition-all ${
-                            checkoutForm.paymentMethod === pm.id
-                              ? 'border-yellow-400 bg-yellow-400/10 text-white font-bold'
-                              : 'border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="paymentMethod"
-                            value={pm.id}
-                            checked={checkoutForm.paymentMethod === pm.id}
-                            onChange={(e) => setCheckoutForm({ ...checkoutForm, paymentMethod: e.target.value })}
-                            className="text-yellow-400 focus:ring-yellow-400"
-                          />
-                          <span>{pm.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Order Total Review */}
-                  <div className="p-3 bg-zinc-900/60 border border-zinc-800/80 rounded-sm flex items-center justify-between text-xs mt-4">
-                    <div>
-                      <span className="text-zinc-400 uppercase tracking-wider font-bold block">
-                        Payable Amount:
-                      </span>
-                      <span className="text-zinc-500 text-[10px] block mt-0.5">
-                        Incl. 18% GST & 5% Handling • Free Delivery
-                      </span>
-                    </div>
-                    <span className="text-yellow-400 font-mono font-black text-base">
-                      {formatPrice(finalTotal, primaryCurrency)}
-                    </span>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmittingOrder}
-                    className="w-full mt-4 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black py-3.5 px-6 text-xs sm:text-sm tracking-[0.25em] uppercase rounded-sm transition-all duration-200 cursor-pointer shadow-lg shadow-yellow-400/10 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isSubmittingOrder ? (
-                      <>
-                        <span className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                        <span>Securing Drop...</span>
-                      </>
-                    ) : (
-                      <span>Confirm & Place Drop Order</span>
-                    )}
-                  </button>
-                </form>
-              </div>
-            ) : (
-              /* Success confirmation view */
-              <div className="text-center py-6">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 mx-auto mb-4 flex items-center justify-center">
-                  <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                </div>
-                <span className="text-emerald-400 text-xs font-mono font-bold tracking-widest uppercase block mb-1">
-                  Order Confirmed
-                </span>
-                <h3 className="text-white text-2xl font-black uppercase tracking-tight mb-2">
-                  Drop Secured!
-                </h3>
-                <p className="text-zinc-400 text-xs max-w-xs mx-auto mb-4">
-                  Thank you, <span className="text-white font-bold">{checkoutForm.fullname}</span>. Your garment order has been booked and will be dispatched via Express Courier.
-                </p>
-                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-sm font-mono text-xs text-zinc-400 max-w-xs mx-auto mb-6">
-                  Order ID: <span className="text-yellow-400 font-bold">{placedOrderId}</span>
-                </div>
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCheckoutOpen(false)
-                      setOrderPlaced(false)
-                      navigate('/')
-                    }}
-                    className="bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black px-6 py-3 text-xs tracking-widest uppercase rounded-sm cursor-pointer shadow-md"
-                  >
-                    Back to Catalog
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── FLOATING TOAST NOTIFICATION ── */}
       {toastMessage && (

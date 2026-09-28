@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux'
 import { Navigate, Link } from 'react-router'
 import { useAuth } from '../hook/useAuth.js'
 
-const Protected = ({ children, role = "buyer" }) => {
+const Protected = ({ children, role = null }) => {
   const user = useSelector(state => state.auth.user)
   const loading = useSelector(state => state.auth.loading)
   const { handleBecomeSeller } = useAuth()
@@ -77,10 +77,6 @@ const Protected = ({ children, role = "buyer" }) => {
         </div>
       </div>
     )
-  }
-
-  if (user.role !== role) {
-    return <Navigate to="/" replace />
   }
 
   return children

@@ -78,7 +78,7 @@ export async function getAllProducts(req,res) {
 export async function getProductDetails(req,res) {
     const {id} = req.params
 
-    const product = await productModel.findById(id)
+    const product = await productModel.findById(id).populate("seller", "fullname email role")
 
     if(!product){
         return res.status(404).json({

@@ -16,6 +16,13 @@ export const addToCart = async (req, res) => {
             });
         }
 
+        if (product.seller && product.seller.toString() === req.user._id.toString()) {
+            return res.status(403).json({
+                message: "You cannot add your own product to the bag",
+                success: false
+            });
+        }
+
         let matchedVariant = null;
         if (variantId) {
             matchedVariant = product.variants?.find(

@@ -763,6 +763,8 @@ const Home = () => {
               const imageCount = product.images?.length || 0
               const totalStock = getProductStock(product)
               const isSoldOut = totalStock <= 0
+              const sellerId = product.seller?._id ? String(product.seller._id) : String(product.seller)
+              const isOwnProduct = user?._id && sellerId && String(user._id) === sellerId
 
               return (
                 <div
@@ -777,6 +779,14 @@ const Home = () => {
                       <div className="absolute top-2.5 left-2.5 bg-red-600/90 backdrop-blur-sm border border-red-500/50 px-2.5 py-0.5 rounded-sm text-[9px] tracking-widest text-white font-black uppercase flex items-center gap-1.5 z-10 shadow-lg">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                         <span>Sold Out</span>
+                      </div>
+                    )}
+
+                    {/* Seller Own Drop Badge */}
+                    {isOwnProduct && (
+                      <div className="absolute top-2.5 right-2.5 bg-yellow-400 text-zinc-950 px-2 py-0.5 rounded-xs text-[9px] font-black tracking-widest uppercase shadow-md z-10 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-pulse" />
+                        <span>Your Drop</span>
                       </div>
                     )}
 
@@ -798,7 +808,7 @@ const Home = () => {
                     )}
 
                     {/* Image count pill */}
-                    {imageCount > 1 && (
+                    {imageCount > 1 && !isOwnProduct && (
                       <div className="absolute top-2.5 right-2.5 bg-black/70 backdrop-blur-sm border border-white/10 px-2 py-0.5 rounded-sm text-[10px] tracking-wider text-zinc-300 font-medium">
                         {imageCount} photos
                       </div>

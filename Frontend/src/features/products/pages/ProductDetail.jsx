@@ -592,8 +592,28 @@ const ProductDetail = () => {
     currentStock,
   ])
 
-  const showBagToast = (msg) => {
-    setBagToast(msg)
+  // Check if current authenticated user is the creator/seller of this product
+  const isOwnProduct = useMemo(() => {
+    if (!user?._id || !product?.seller) return false
+    const sellerId = product.seller?._id ? String(product.seller._id) : String(product.seller)
+    return String(user._id) === sellerId
+  }, [user, product])
+
+  const showBagToast = (msg, type = null) => {
+    const isError =
+      type === 'error' ||
+      (typeof msg === 'string' &&
+        (msg.toLowerCase().includes('cannot') ||
+          msg.toLowerCase().includes('fail') ||
+          msg.toLowerCase().includes('error') ||
+          msg.toLowerCase().includes('own') ||
+          msg.toLowerCase().includes('seller') ||
+          msg.toLowerCase().includes('out of stock')))
+
+    setBagToast({
+      message: typeof msg === 'string' ? msg : msg?.message || 'Notification',
+      type: isError ? 'error' : (type || 'success')
+    })
     setTimeout(() => setBagToast(null), 3500)
   }
 
@@ -1443,7 +1463,56 @@ const ProductDetail = () => {
 
                 {/* ── ACTION BUTTONS: ADD TO BAG & BUY NOW ── */}
                 <div className="mt-8 space-y-3">
-                  {!isSelectedOutOfStock && currentStock > 0 && totalStock > 0 ? (
+                  {isOwnProduct ? (
+                    /* Creator / Seller Drop Notice: Cannot buy or add to bag own drop */
+                    <div className="space-y-3.5">
+                      <div className="p-4 bg-zinc-950/80 border border-yellow-400/30 rounded-sm">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                          <span className="text-yellow-400 text-xs uppercase font-black tracking-widest">
+                            Your Own Garment Drop
+                          </span>
+                        </div>
+                        <p className="text-zinc-400 text-xs leading-relaxed">
+                          Aap is product ke creator hain. Sellers apne khud ke products ko bag mein add ya purchase nahi kar sakte. Dusre buyers is drop ko buy ya add to bag kar sakte hain.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full bg-zinc-900/60 border border-zinc-800 text-zinc-600 font-bold py-3.5 px-4 text-xs tracking-wider uppercase rounded-sm cursor-not-allowed flex items-center justify-center gap-2 select-none"
+                        >
+                          <svg className="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                          </svg>
+                          <span>Buy Now (Creator)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full bg-zinc-900/60 border border-zinc-800 text-zinc-600 font-bold py-3.5 px-4 text-xs tracking-wider uppercase rounded-sm cursor-not-allowed flex items-center justify-center gap-2 select-none"
+                        >
+                          <svg className="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                          </svg>
+                          <span>Add To Bag (Creator)</span>
+                        </button>
+                      </div>
+
+                      <Link
+                        to={`/seller/product/${product._id}`}
+                        className="w-full bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-black py-4 px-6 text-xs tracking-[0.2em] uppercase rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-yellow-400/10 text-center"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                        </svg>
+                        <span>Manage In Seller Studio</span>
+                      </Link>
+                    </div>
+                  ) : !isSelectedOutOfStock && currentStock > 0 && totalStock > 0 ? (
                     <>
                       {/* Buy Now Button (High Priority CTA) */}
                       <button
@@ -1452,6 +1521,10 @@ const ProductDetail = () => {
                         onClick={async () => {
                           if (!user) {
                             navigate('/login')
+                            return
+                          }
+                          if (isOwnProduct) {
+                            showBagToast('You cannot purchase your own garment drop')
                             return
                           }
                           if (!isSelectionComplete || currentStock <= 0) return
@@ -1492,6 +1565,10 @@ const ProductDetail = () => {
                         onClick={async () => {
                           if (!user) {
                             navigate('/login')
+                            return
+                          }
+                          if (isOwnProduct) {
+                            showBagToast('You cannot add your own garment drop to your bag')
                             return
                           }
                           if (!isSelectionComplete || currentStock <= 0) return
@@ -1757,9 +1834,32 @@ const ProductDetail = () => {
 
       {/* ── BAG / ACTION TOAST NOTIFICATION ── */}
       {bagToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#121212] border border-zinc-800 text-white px-5 py-3.5 rounded-sm shadow-2xl flex items-center gap-3 backdrop-blur-md">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span className="text-xs font-bold tracking-wide">{bagToast}</span>
+        <div
+          className={`fixed bottom-6 right-6 z-50 bg-[#121212] ${
+            bagToast.type === 'error'
+              ? 'border border-red-500/50 shadow-red-950/20'
+              : 'border border-zinc-800'
+          } text-white px-5 py-3.5 rounded-sm shadow-2xl flex items-center gap-3 backdrop-blur-md transition-all`}
+        >
+          <div className="relative flex items-center justify-center">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                bagToast.type === 'error' ? 'bg-red-500 animate-ping' : 'bg-emerald-400 animate-ping'
+              }`}
+            />
+            <div
+              className={`absolute w-2 h-2 rounded-full ${
+                bagToast.type === 'error' ? 'bg-red-500' : 'bg-emerald-400'
+              }`}
+            />
+          </div>
+          <span
+            className={`text-xs font-bold tracking-wide ${
+              bagToast.type === 'error' ? 'text-red-200' : 'text-zinc-100'
+            }`}
+          >
+            {typeof bagToast === 'string' ? bagToast : bagToast.message}
+          </span>
         </div>
       )}
 
