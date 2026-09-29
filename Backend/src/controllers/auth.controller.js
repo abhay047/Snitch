@@ -100,17 +100,25 @@ export const googleCallback = async (req, res) => {
         }
 
         const { id, displayName, emails } = req.user;
-        const email = emails[0].value;
+        const email = (emails && emails.length > 0) ? emails[0].value : req.user?._json?.email;
+        const fullname = displayName || req.user?._json?.name || (email ? email.split("@")[0] : "Snitch Member");
+
+        if (!email) {
+            return res.redirect("http://localhost:5173/login?error=server_error");
+        }
 
         let user = await userModel.findOne({ email });
 
         if (!user) {
             user = await userModel.create({
                 email,
-                fullname: displayName,
+                fullname,
                 googleId: id,
                 role: "buyer"
             });
+        } else if (!user.googleId) {
+            user.googleId = id;
+            await user.save();
         }
 
         const token = jwt.sign({

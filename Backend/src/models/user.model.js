@@ -10,7 +10,9 @@ const userSchema = new mongoose.Schema({
     contact: {
         type: String,
         required: false,
-        unique: true
+        unique: true,
+        sparse: true,
+        trim: true
     },
     password: {
         type: String,
@@ -30,16 +32,19 @@ const userSchema = new mongoose.Schema({
     },
     googleId:{
         type: String,
+        sparse: true,
+        unique: true
     }
 });
 
 userSchema.pre("save", async function () {
-    if (!this.isModified("password")) return
+    if (!this.isModified("password") || !this.password) return
     const hash = await bcrypt.hash(this.password, 10)
     this.password = hash
 })
 
 userSchema.methods.comparePassword = async function (password) {
+    if (!this.password) return false
     return await bcrypt.compare(password, this.password)
 }
 
