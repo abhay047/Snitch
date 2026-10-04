@@ -1,6 +1,8 @@
 import cartModel from "../models/cart.model.js";
 import productModel from "../models/product.model.js";
 import { stockOfVariant } from "../dao/product.dao.js";
+import { createOrder, verifyPaymentSignature } from "../services/payment.service.js";
+import paymentModel from "../models/payment.model.js";
 
 export const addToCart = async (req, res) => {
     try {
@@ -257,6 +259,238 @@ export const getCart = async (req, res) => {
         console.error("Error getting cart:", error);
         return res.status(500).json({
             message: error.message || "Failed to retrieve shopping bag",
+            success: false
+        });
+    }
+};
+
+export const createOrderController = async (req, res) => {
+    try {
+        let cart = await cartModel.findOne({ user: req.user._id }).populate("items.product");
+
+        let subtotal = 0;
+        let currency = req.body?.currency || "INR";
+        const orderItems = [];
+
+        if (cart && cart.items && cart.items.length > 0) {
+            for (const item of cart.items) {
+                let unitPrice = 0;
+                let itemCurrency = currency;
+                const product = item.product;
+                const variantId = item.variant ? item.variant.toString() : null;
+                let matchedVariant = null;
+
+                if (variantId && product && Array.isArray(product.variants)) {
+                    matchedVariant = product.variants.find(
+                        (v) => v._id.toString() === variantId
+                    );
+                    if (matchedVariant?.price?.amount != null) {
+                        unitPrice = Number(matchedVariant.price.amount);
+                        if (matchedVariant.price.currency) itemCurrency = matchedVariant.price.currency;
+                    }
+                }
+
+                if (!unitPrice && product?.price?.amount != null) {
+                    unitPrice = Number(product.price.amount);
+                    if (product.price.currency) itemCurrency = product.price.currency;
+                }
+
+                if (!unitPrice && item.price?.amount != null) {
+                    unitPrice = Number(item.price.amount);
+                    if (item.price.currency) itemCurrency = item.price.currency;
+                }
+
+                const qty = Math.max(1, Number(item.quantity) || 1);
+                subtotal += unitPrice * qty;
+
+                // Format images to [{ url: String }] matching paymentModel schema
+                let itemImages = [];
+                if (matchedVariant?.images && matchedVariant.images.length > 0) {
+                    itemImages = matchedVariant.images.map((img) => ({
+                        url: typeof img === "string" ? img : img.url || ""
+                    }));
+                } else if (product?.images && product.images.length > 0) {
+                    itemImages = product.images.map((img) => ({
+                        url: typeof img === "string" ? img : img.url || ""
+                    }));
+                }
+
+                orderItems.push({
+                    title: product?.title || "Garment",
+                    productId: product?._id || item.product,
+                    variantId: item.variant || null,
+                    quantity: qty,
+                    images: itemImages,
+                    description: product?.description || "",
+                    price: {
+                        amount: unitPrice,
+                        currency: itemCurrency
+                    }
+                });
+            }
+        }
+
+        let finalAmount = 0;
+        if (subtotal > 0) {
+            const gstAmount = Math.round(subtotal * 0.18);
+            const handlingFee = Math.round(subtotal * 0.05);
+            finalAmount = subtotal + gstAmount + handlingFee;
+        } else if (req.body?.amount && Number(req.body.amount) > 0) {
+            finalAmount = Math.round(Number(req.body.amount));
+        }
+
+        if (!finalAmount || finalAmount <= 0) {
+            return res.status(400).json({
+                message: "Shopping bag is empty or amount is invalid",
+                success: false
+            });
+        }
+
+        const order = await createOrder({ amount: finalAmount, currency });
+
+        // Save initial payment record in database with "pending" status
+        const payment = await paymentModel.create({
+            user: req.user._id,
+            status: "pending",
+            price: {
+                amount: finalAmount,
+                currency: currency
+            },
+            razorpay: {
+                orderId: order.id
+            },
+            orderItems: orderItems
+        });
+
+        return res.status(200).json({
+            message: "Order created successfully",
+            success: true,
+            order,
+            payment
+        });
+    } catch (error) {
+        console.error("Error creating payment order:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to create payment order",
+            success: false
+        });
+    }
+};
+
+export const verifyPaymentController = async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+        if (!razorpay_order_id || !razorpay_payment_id) {
+            return res.status(400).json({
+                message: "Payment order ID and payment ID are required",
+                success: false
+            });
+        }
+
+        if (razorpay_signature) {
+            const isValid = verifyPaymentSignature({
+                orderId: razorpay_order_id,
+                paymentId: razorpay_payment_id,
+                signature: razorpay_signature
+            });
+
+            if (!isValid) {
+                await paymentModel.findOneAndUpdate(
+                    { "razorpay.orderId": razorpay_order_id, user: req.user._id },
+                    {
+                        status: "failed",
+                        "razorpay.paymentId": razorpay_payment_id,
+                        "razorpay.signature": razorpay_signature
+                    }
+                );
+
+                return res.status(400).json({
+                    message: "Payment signature verification failed",
+                    success: false
+                });
+            }
+        }
+
+        // Update payment record in database to "paid"
+        const payment = await paymentModel.findOneAndUpdate(
+            { "razorpay.orderId": razorpay_order_id, user: req.user._id },
+            {
+                status: "paid",
+                "razorpay.paymentId": razorpay_payment_id,
+                "razorpay.signature": razorpay_signature || ""
+            },
+            { new: true }
+        );
+
+        // Clear user's bag in database upon payment success
+        let cart = await cartModel.findOne({ user: req.user._id });
+        if (cart) {
+            cart.items = [];
+            await cart.save();
+        }
+
+        return res.status(200).json({
+            message: "Payment verified and recorded in database",
+            success: true,
+            payment
+        });
+    } catch (error) {
+        console.error("Error verifying payment:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to verify and record payment",
+            success: false
+        });
+    }
+};
+
+export const paymentFailedController = async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id } = req.body;
+
+        if (razorpay_order_id) {
+            const payment = await paymentModel.findOneAndUpdate(
+                { "razorpay.orderId": razorpay_order_id, user: req.user._id },
+                {
+                    status: "failed",
+                    "razorpay.paymentId": razorpay_payment_id || ""
+                },
+                { new: true }
+            );
+
+            return res.status(200).json({
+                message: "Payment failure recorded in database",
+                success: true,
+                payment
+            });
+        }
+
+        return res.status(400).json({
+            message: "Order ID is required to record payment failure",
+            success: false
+        });
+    } catch (error) {
+        console.error("Error recording payment failure:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to record payment failure",
+            success: false
+        });
+    }
+};
+
+export const getUserPaymentsController = async (req, res) => {
+    try {
+        const payments = await paymentModel.find({ user: req.user._id }).sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            message: "Payment records retrieved successfully",
+            success: true,
+            payments
+        });
+    } catch (error) {
+        console.error("Error fetching user payments:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to fetch user payments",
             success: false
         });
     }

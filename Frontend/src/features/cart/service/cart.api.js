@@ -34,3 +34,18 @@ export const getCart = async () => {
     const response = await cartApiInstance.get("/")
     return response.data
 }
+
+export const createCartOrder = async (payload) => {
+    const response = await cartApiInstance.post("/payment/create/order", payload || {})
+    return response.data
+}
+
+export const verifyPayment = async (payload) => {
+    const response = await cartApiInstance.post("/payment/verify", payload)
+    return response.data
+}
+
+export const recordPaymentFailed = async (payload) => {
+    const response = await cartApiInstance.post("/payment/failed", payload)
+    return response.data
+}
