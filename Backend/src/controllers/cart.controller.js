@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import cartModel from "../models/cart.model.js";
 import productModel from "../models/product.model.js";
 import { stockOfVariant } from "../dao/product.dao.js";
@@ -315,6 +316,21 @@ export const createOrderController = async (req, res) => {
                     }));
                 }
 
+                let itemSize = "";
+                let itemColor = "";
+                if (matchedVariant?.attributes) {
+                    if (matchedVariant.attributes instanceof Map) {
+                        itemSize = matchedVariant.attributes.get("size") || matchedVariant.attributes.get("Size") || "";
+                        itemColor = matchedVariant.attributes.get("color") || matchedVariant.attributes.get("Color") || "";
+                    } else if (typeof matchedVariant.attributes === "object") {
+                        itemSize = matchedVariant.attributes.size || matchedVariant.attributes.Size || "";
+                        itemColor = matchedVariant.attributes.color || matchedVariant.attributes.Color || "";
+                    }
+                }
+                if (!itemColor && product?.color) {
+                    itemColor = product.color;
+                }
+
                 orderItems.push({
                     title: product?.title || "Garment",
                     productId: product?._id || item.product,
@@ -322,6 +338,8 @@ export const createOrderController = async (req, res) => {
                     quantity: qty,
                     images: itemImages,
                     description: product?.description || "",
+                    size: itemSize,
+                    color: itemColor,
                     price: {
                         amount: unitPrice,
                         currency: itemCurrency
@@ -388,6 +406,34 @@ export const verifyPaymentController = async (req, res) => {
             });
         }
 
+        // Find existing payment document in database
+        let payment = await paymentModel.findOne({
+            "razorpay.orderId": razorpay_order_id,
+            user: req.user._id
+        });
+
+        if (!payment) {
+            payment = await paymentModel.findOne({
+                "razorpay.orderId": razorpay_order_id
+            });
+        }
+
+        if (!payment) {
+            return res.status(404).json({
+                message: "Payment record not found",
+                success: false
+            });
+        }
+
+        // Prevent double stock deduction if payment was already verified and processed
+        if (payment.status === "paid") {
+            return res.status(200).json({
+                message: "Payment already verified and inventory already updated",
+                success: true,
+                payment
+            });
+        }
+
         if (razorpay_signature) {
             const isValid = verifyPaymentSignature({
                 orderId: razorpay_order_id,
@@ -396,14 +442,10 @@ export const verifyPaymentController = async (req, res) => {
             });
 
             if (!isValid) {
-                await paymentModel.findOneAndUpdate(
-                    { "razorpay.orderId": razorpay_order_id, user: req.user._id },
-                    {
-                        status: "failed",
-                        "razorpay.paymentId": razorpay_payment_id,
-                        "razorpay.signature": razorpay_signature
-                    }
-                );
+                payment.status = "failed";
+                payment.razorpay.paymentId = razorpay_payment_id;
+                payment.razorpay.signature = razorpay_signature;
+                await payment.save();
 
                 return res.status(400).json({
                     message: "Payment signature verification failed",
@@ -413,25 +455,68 @@ export const verifyPaymentController = async (req, res) => {
         }
 
         // Update payment record in database to "paid"
-        const payment = await paymentModel.findOneAndUpdate(
-            { "razorpay.orderId": razorpay_order_id, user: req.user._id },
-            {
-                status: "paid",
-                "razorpay.paymentId": razorpay_payment_id,
-                "razorpay.signature": razorpay_signature || ""
-            },
-            { new: true }
-        );
+        payment.status = "paid";
+        payment.razorpay.paymentId = razorpay_payment_id;
+        payment.razorpay.signature = razorpay_signature || "";
+        await payment.save();
+
+        // Fetch user's cart
+        let cart = await cartModel.findOne({ user: req.user._id });
+
+        // Deduct purchased quantity from available stock for each product and variant
+        const itemsToProcess = (Array.isArray(payment.orderItems) && payment.orderItems.length > 0)
+            ? payment.orderItems
+            : (cart && Array.isArray(cart.items) ? cart.items : []);
+
+        for (const item of itemsToProcess) {
+            const qtyToDeduct = Math.max(1, Number(item.quantity) || 1);
+            const productId = item.productId || item.product;
+            const variantId = item.variantId
+                ? item.variantId.toString()
+                : (item.variant ? item.variant.toString() : null);
+
+            if (productId) {
+                const product = await productModel.findById(productId);
+                if (product) {
+                    let variantDeducted = false;
+
+                    // 1. Deduct from specific variant's stock if variantId is present
+                    if (variantId && Array.isArray(product.variants) && product.variants.length > 0) {
+                        const matchedVariant = product.variants.find(
+                            (v) => v._id.toString() === variantId
+                        );
+                        if (matchedVariant) {
+                            const currentVariantStock = Number(matchedVariant.stock) || 0;
+                            matchedVariant.stock = Math.max(0, currentVariantStock - qtyToDeduct);
+                            variantDeducted = true;
+                        }
+                    }
+
+                    // 2. If no specific variant matched but product has variants, deduct from first/default variant
+                    if (!variantDeducted && Array.isArray(product.variants) && product.variants.length > 0) {
+                        const currentVariantStock = Number(product.variants[0].stock) || 0;
+                        product.variants[0].stock = Math.max(0, currentVariantStock - qtyToDeduct);
+                    }
+
+                    // 3. Deduct from root product stock
+                    if (product.stock != null) {
+                        const currentProductStock = Number(product.stock) || 0;
+                        product.stock = Math.max(0, currentProductStock - qtyToDeduct);
+                    }
+
+                    await product.save();
+                }
+            }
+        }
 
         // Clear user's bag in database upon payment success
-        let cart = await cartModel.findOne({ user: req.user._id });
         if (cart) {
             cart.items = [];
             await cart.save();
         }
 
         return res.status(200).json({
-            message: "Payment verified and recorded in database",
+            message: "Payment verified, inventory deducted, and recorded in database",
             success: true,
             payment
         });
@@ -491,6 +576,39 @@ export const getUserPaymentsController = async (req, res) => {
         console.error("Error fetching user payments:", error);
         return res.status(500).json({
             message: error.message || "Failed to fetch user payments",
+            success: false
+        });
+    }
+};
+
+export const getPaymentDetailsController = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const payment = await paymentModel.findOne({
+            $or: [
+                { "razorpay.orderId": orderId },
+                { "razorpay.paymentId": orderId },
+                ...(mongoose.Types.ObjectId.isValid(orderId) ? [{ _id: orderId }] : [])
+            ],
+            user: req.user._id
+        });
+
+        if (!payment) {
+            return res.status(404).json({
+                message: "Order details not found",
+                success: false
+            });
+        }
+
+        return res.status(200).json({
+            message: "Order details retrieved successfully",
+            success: true,
+            payment
+        });
+    } catch (error) {
+        console.error("Error retrieving order details:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to retrieve order details",
             success: false
         });
     }

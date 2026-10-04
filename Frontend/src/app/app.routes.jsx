@@ -16,6 +16,7 @@ import UserPrivacy from "../features/Shared/Legal/UserPrivacy.jsx"
 import TermAndConditions from "../features/Shared/Legal/TermAndConditions.jsx";
 import Payment from "../features/Shared/Shopping/Payment.jsx";
 import NotFound from "../features/Shared/pages/NotFound.jsx";
+import OrderSuccess from "../features/cart/pages/OrderSuccess.jsx";
 
 export const routes = createBrowserRouter([
     {
@@ -95,6 +96,18 @@ export const routes = createBrowserRouter([
                 element:<Payment/>
             }
         ]
+    },
+    {
+        path: "/order-success",
+        element: <Protected>
+            <OrderSuccess/>
+        </Protected>
+    },
+    {
+        path: "/order/success",
+        element: <Protected>
+            <OrderSuccess/>
+        </Protected>
     },
     {
         path: "*",

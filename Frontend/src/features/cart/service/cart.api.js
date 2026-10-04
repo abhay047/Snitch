@@ -49,3 +49,13 @@ export const recordPaymentFailed = async (payload) => {
     const response = await cartApiInstance.post("/payment/failed", payload)
     return response.data
 }
+
+export const getOrderDetails = async (orderId) => {
+    const response = await cartApiInstance.get(`/payment/order/${orderId}`)
+    return response.data
+}
+
+export const getPaymentHistory = async () => {
+    const response = await cartApiInstance.get("/payment/history")
+    return response.data
+}

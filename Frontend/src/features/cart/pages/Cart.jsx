@@ -5,7 +5,6 @@ import { useCart } from '../hook/useCart'
 import { useAuth } from '../../auth/hook/useAuth'
 import LogoutConfirmModal from '../../auth/components/LogoutConfirmModal.jsx'
 import ClearBagConfirmModal from '../components/ClearBagConfirmModal.jsx'
-import PaymentStatusModal from '../components/PaymentStatusModal.jsx'
 import Footer from '../../Shared/Components/Footer.jsx'
 import {useRazorpay} from "react-razorpay"
 
@@ -55,18 +54,6 @@ const Cart = () => {
   } = useCart()
   const { handleGetMe, handleLogout } = useAuth()
   const {error, isLoading, Razorpay} = useRazorpay()
-
-  // Payment Status Modal State (Success or Failed popup)
-  const [paymentModal, setPaymentModal] = useState({
-    isOpen: false,
-    status: 'success', // 'success' | 'failed'
-    title: '',
-    message: '',
-    paymentId: '',
-    orderId: '',
-    amount: null,
-    currency: 'INR',
-  })
 
   // Logout Confirmation Modal State
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false)
@@ -415,14 +402,7 @@ const Cart = () => {
       })
 
       if (!order) {
-        setPaymentModal({
-          isOpen: true,
-          status: 'failed',
-          title: 'Order Initiation Failed',
-          message: 'Unable to initiate order with payment gateway. Please check your connection and try again.',
-          amount: finalTotal,
-          currency: primaryCurrency,
-        })
+        showToast('Unable to initiate order with payment gateway. Please try again.')
         return
       }
 
@@ -431,7 +411,7 @@ const Cart = () => {
         amount: order.amount,
         currency: order.currency || "INR",
         name: "Snitch",
-        description: "Test transaction",
+        description: "Order Checkout",
         image: "https://ik.imagekit.io/abhay7420/Snitch/snitch_logo_sTG1ODRNA.png",
         order_id: order.id,
         prefill: {
@@ -445,31 +425,67 @@ const Cart = () => {
         handler: async (response) => {
           console.log("Payment Success:", response)
 
+          // Snapshot purchased items before bag is cleared
+          const purchasedItems = (cartItems || []).map((item) => {
+            const { size, color } = getItemVariantDetails(item)
+            return {
+              productId: item.product?._id || item.product,
+              variantId: item.variant?._id || item.variant || null,
+              title: item.product?.title || 'Garment',
+              description: item.product?.description || '',
+              image: getItemImage(item),
+              size: size || '',
+              color: color || '',
+              quantity: Math.max(1, Number(item.quantity) || 1),
+              price: getItemUnitPrice(item),
+              currency: getItemCurrency(item),
+            }
+          })
+
+          let verifiedPayment = null
           try {
-            await handleVerifyPayment({
+            const verifyRes = await handleVerifyPayment({
               razorpay_order_id: response.razorpay_order_id || order.id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             })
+            verifiedPayment = verifyRes?.payment
           } catch (verErr) {
             console.error("Payment verification in database failed:", verErr)
           }
 
-          setPaymentModal({
-            isOpen: true,
-            status: 'success',
-            title: 'Payment Successful',
-            message: 'Your payment was successfully verified! Your order has been placed and is being prepped for complimentary express dispatch.',
-            paymentId: response.razorpay_payment_id || '',
-            orderId: response.razorpay_order_id || order.id || '',
-            amount: order.amount ? Math.round(order.amount / 100) : finalTotal,
-            currency: order.currency || 'INR',
-          })
           try {
             await clearAllInCart()
           } catch (err) {
             console.error("Failed to clear cart:", err)
           }
+
+          // Redirect to OrderSuccess page with full order and product details
+          navigate('/order-success', {
+            state: {
+              paymentId: response.razorpay_payment_id || '',
+              orderId: response.razorpay_order_id || order.id || '',
+              amount: order.amount ? Math.round(order.amount / 100) : finalTotal,
+              currency: order.currency || 'INR',
+              subtotal,
+              gstAmount,
+              handlingFee,
+              items: (verifiedPayment?.orderItems && verifiedPayment.orderItems.length > 0)
+                ? verifiedPayment.orderItems.map((oi) => ({
+                    productId: oi.productId,
+                    variantId: oi.variantId,
+                    title: oi.title,
+                    description: oi.description,
+                    image: oi.images?.[0]?.url || oi.images?.[0] || '',
+                    size: oi.size || '',
+                    color: oi.color || '',
+                    quantity: oi.quantity,
+                    price: oi.price?.amount || 0,
+                    currency: oi.price?.currency || 'INR',
+                  }))
+                : purchasedItems,
+            },
+          })
         },
         modal: {
           ondismiss: () => {
@@ -478,15 +494,7 @@ const Cart = () => {
               razorpay_payment_id: '',
             }).catch(() => {})
 
-            setPaymentModal({
-              isOpen: true,
-              status: 'failed',
-              title: 'Payment Cancelled',
-              message: 'You dismissed the checkout window before completing payment. Your bag has been saved so you can retry whenever ready.',
-              orderId: order.id || '',
-              amount: order.amount ? Math.round(order.amount / 100) : finalTotal,
-              currency: order.currency || 'INR',
-            })
+            showToast('Checkout window closed. Your shopping bag remains saved.')
           },
         },
       }
@@ -501,29 +509,13 @@ const Cart = () => {
           razorpay_payment_id: response.error?.metadata?.payment_id || '',
         }).catch(() => {})
 
-        setPaymentModal({
-          isOpen: true,
-          status: 'failed',
-          title: 'Payment Failed',
-          message: response.error?.description || response.error?.reason || 'Transaction could not be completed. No money was deducted from your account. Please try again with another payment method.',
-          paymentId: response.error?.metadata?.payment_id || '',
-          orderId: response.error?.metadata?.order_id || order.id || '',
-          amount: order.amount ? Math.round(order.amount / 100) : finalTotal,
-          currency: order.currency || 'INR',
-        })
+        showToast(response.error?.description || response.error?.reason || 'Payment failed. Please try again.')
       })
 
       rzp.open()
     } catch (err) {
       console.error("Checkout error:", err)
-      setPaymentModal({
-        isOpen: true,
-        status: 'failed',
-        title: 'Payment Gateway Error',
-        message: err?.response?.data?.message || err.message || 'Unable to connect to payment gateway. Please try again.',
-        amount: finalTotal,
-        currency: primaryCurrency,
-      })
+      showToast(err?.response?.data?.message || err.message || 'Unable to connect to payment gateway. Please try again.')
     }
   }
 
@@ -1250,32 +1242,6 @@ const Cart = () => {
         subtotal={subtotal}
         totalQuantity={totalQuantity}
         primaryCurrency={primaryCurrency}
-      />
-
-      {/* ── PAYMENT STATUS MODAL (SUCCESS OR FAILED POPUP) ── */}
-      <PaymentStatusModal
-        isOpen={paymentModal.isOpen}
-        status={paymentModal.status}
-        title={paymentModal.title}
-        message={paymentModal.message}
-        paymentId={paymentModal.paymentId}
-        orderId={paymentModal.orderId}
-        amount={paymentModal.amount}
-        currency={paymentModal.currency}
-        onClose={() => {
-          setPaymentModal((prev) => ({ ...prev, isOpen: false }))
-          if (paymentModal.status === 'success') {
-            navigate('/')
-          }
-        }}
-        onPrimaryAction={() => {
-          setPaymentModal((prev) => ({ ...prev, isOpen: false }))
-          if (paymentModal.status === 'success') {
-            navigate('/')
-          } else {
-            handleCheckout()
-          }
-        }}
       />
     </div>
   )

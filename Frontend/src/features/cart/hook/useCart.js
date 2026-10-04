@@ -1,4 +1,15 @@
-import { addItem, getCart, updateItemQuantity, removeItem, clearCart, createCartOrder, verifyPayment, recordPaymentFailed } from "../service/cart.api.js";
+import { 
+    addItem, 
+    getCart, 
+    updateItemQuantity, 
+    removeItem, 
+    clearCart, 
+    createCartOrder, 
+    verifyPayment, 
+    recordPaymentFailed,
+    getOrderDetails,
+    getPaymentHistory
+} from "../service/cart.api.js";
 import { useDispatch } from "react-redux";
 import { setItems } from "../state/cart.slice.js";
 
@@ -62,6 +73,16 @@ export const useCart = () => {
         return data;
     }
 
+    async function handleGetOrderDetails(orderId) {
+        const data = await getOrderDetails(orderId);
+        return data.payment;
+    }
+
+    async function handleGetPaymentHistory() {
+        const data = await getPaymentHistory();
+        return data.payments;
+    }
+
     return {
         handleAddItem,
         handleGetCart,
@@ -70,6 +91,8 @@ export const useCart = () => {
         handleClearCart,
         handleCreateCartOrder,
         handleVerifyPayment,
-        handleRecordPaymentFailed
+        handleRecordPaymentFailed,
+        handleGetOrderDetails,
+        handleGetPaymentHistory
     };
 };

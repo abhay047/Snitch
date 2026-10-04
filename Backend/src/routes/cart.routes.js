@@ -10,7 +10,8 @@ import {
     createOrderController,
     verifyPaymentController,
     paymentFailedController,
-    getUserPaymentsController
+    getUserPaymentsController,
+    getPaymentDetailsController
 } from "../controllers/cart.controller.js"
 
 const router = express.Router()
@@ -25,5 +26,6 @@ router.post("/payment/create/order", authenticateUser, createOrderController)
 router.post("/payment/verify", authenticateUser, verifyPaymentController)
 router.post("/payment/failed", authenticateUser, paymentFailedController)
 router.get("/payment/history", authenticateUser, getUserPaymentsController)
+router.get("/payment/order/:orderId", authenticateUser, getPaymentDetailsController)
 
 export default router
