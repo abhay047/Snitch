@@ -18,6 +18,12 @@ import blacklistedTokenModel from "../models/blacklistedToken.model.js";
 
 const router = Router();
 
+const getClientLoginUrl = (query = "") => {
+    const clientUrl = config.CLIENT_URL || "/";
+    const base = clientUrl === "/" ? "/login" : `${clientUrl.replace(/\/+$/, "")}/login`;
+    return query ? `${base}?${query}` : base;
+};
+
 router.post("/register", validateRegisterUser, register);
 
 router.post("/login", validateLoginUser, login);
@@ -30,7 +36,7 @@ router.get(
             if (token) {
                 const isBlacklisted = await blacklistedTokenModel.findOne({ token });
                 if (isBlacklisted) {
-                    return res.redirect("http://localhost:5173/login?error=blacklisted");
+                    return res.redirect(getClientLoginUrl("error=blacklisted"));
                 }
             }
             next();
@@ -43,7 +49,7 @@ router.get(
 
 router.get(
     "/google/callback",
-    passport.authenticate("google", { session: false, failureRedirect: config.NODE_ENV === "development" ? "http://localhost:5173/login" : "/login" }),
+    passport.authenticate("google", { session: false, failureRedirect: getClientLoginUrl("error=auth_failed") }),
     googleCallback,
 );
 

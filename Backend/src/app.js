@@ -17,6 +17,9 @@ const publicPath = path.join(__dirname, "../public")
 
 const app = express()
 
+// Trust reverse proxy (Render, Heroku, Cloudflare, etc.) to ensure req.protocol is "https"
+app.set("trust proxy", 1)
+
 app.use(morgan("dev"))
 app.use(express.json())
 app.use(express.urlencoded({extended:true}))
@@ -33,7 +36,8 @@ app.use(passport.initialize())
 passport.use(new GoogleStrategy({
     clientID: config.GOOGLE_CLIENT_ID,
     clientSecret: config.GOOGLE_CLIENT_SECRET,
-    callbackURL: "/api/auth/google/callback"
+    callbackURL: config.GOOGLE_CALLBACK_URL,
+    proxy: true
 },(accessToken, refreshToken, profile, done)=>{
     return done(null, profile)
 }))

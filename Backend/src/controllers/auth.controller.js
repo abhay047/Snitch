@@ -3,6 +3,14 @@ import blacklistedTokenModel from "../models/blacklistedToken.model.js";
 import jwt from "jsonwebtoken";
 import { config } from "../config/config.js";
 
+const getClientRedirectUrl = (path = "/") => {
+    const clientUrl = config.CLIENT_URL || "/";
+    if (clientUrl === "/") return path;
+    const base = clientUrl.replace(/\/+$/, "");
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `${base}${cleanPath}`;
+};
+
 async function sendTokenResponse(user, res, message) {
     const token = jwt.sign({
         id: user._id,
@@ -95,7 +103,7 @@ export const googleCallback = async (req, res) => {
         if (incomingToken) {
             const isBlacklisted = await blacklistedTokenModel.findOne({ token: incomingToken });
             if (isBlacklisted) {
-                return res.redirect("http://localhost:5173/login?error=blacklisted");
+                return res.redirect(getClientRedirectUrl("/login?error=blacklisted"));
             }
         }
 
@@ -104,7 +112,7 @@ export const googleCallback = async (req, res) => {
         const fullname = displayName || req.user?._json?.name || (email ? email.split("@")[0] : "Snitch Member");
 
         if (!email) {
-            return res.redirect("http://localhost:5173/login?error=server_error");
+            return res.redirect(getClientRedirectUrl("/login?error=server_error"));
         }
 
         let user = await userModel.findOne({ email });
@@ -133,10 +141,10 @@ export const googleCallback = async (req, res) => {
             secure: config.NODE_ENV === "production",
         });
 
-        res.redirect("http://localhost:5173");
+        res.redirect(getClientRedirectUrl("/"));
     } catch (error) {
         console.error("Google callback error:", error);
-        res.redirect("http://localhost:5173/login?error=server_error");
+        res.redirect(getClientRedirectUrl("/login?error=server_error"));
     }
 };
 
